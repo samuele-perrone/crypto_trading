@@ -163,6 +163,16 @@ def run_tick():
                 notify(f"🟢 BOUGHT {volume} {pair_arg} @ ${price:,.2f} "
                        f"(~${usd:.2f}) [{out['mode']}]")
 
+    # Daily proof-of-life when nothing traded (disable with DAILY_REPORT=false)
+    if out["action"] == "none" and os.environ.get("DAILY_REPORT", "true").lower() != "false":
+        if position:
+            status = (f"holding {position['volume']} @ ${position['entry']:,.2f} "
+                      f"({out.get('unrealized_pct', 0):+.2f}%)")
+        else:
+            status = "no position, waiting for SMA cross up"
+        notify(f"📊 {pair_arg} ${price:,.2f} | SMA{fast} {out['sma_fast']:,.2f} vs "
+               f"SMA{slow} {out['sma_slow']:,.2f} | {status} [{out['mode']}]")
+
     return out
 
 
