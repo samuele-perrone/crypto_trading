@@ -5,3 +5,4 @@ bot.log
 !.env.example
 .vercel
 __pycache__/
+.env*.local
