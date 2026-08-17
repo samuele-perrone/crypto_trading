@@ -63,6 +63,39 @@ python3 kraken_bot.py --pair BTC/USD --usd 50 --live
 | `--poll` | 300 | Seconds between market checks |
 | `--live` | off | Place real orders |
 
+## Backtest results (deployed config)
+
+ETH/USD, SMA 20/30 on daily candles, no stop-loss/take-profit, 0.26% taker
+fee per side. Period: 2024-08-27 → 2026-08-16 (719 days), real Kraken data.
+
+| Metric | Value |
+|---|---|
+| Trades closed | 14 |
+| Win rate | 57% (8/14) |
+| Avg win / avg loss | +16.6% / −2.8% |
+| Best / worst trade | +45.0% / −5.0% |
+| Profit factor | 7.81 |
+| Max drawdown | −4.7% |
+| Total return | +115.5% (≈ +59%/yr) |
+| Buy & hold ETH same period | −28.8% |
+| Positive months | 58% (avg +9.6%/mo, worst −5.0%) |
+
+Compared against alternatives on the same data (EMA cross, MACD, Donchian
+breakout, 30/60-day momentum): only 30-day momentum was competitive
+(+45%/yr on ETH); MACD and Donchian lost money. Every strategy profited on
+ETH and lost on SOL — the asset choice matters more than the indicator.
+
+**Read this before extrapolating:**
+
+- One 2-year window with strong trends in both directions — ideal conditions
+  for a crossover system. Expect meaningfully less going forward.
+- This config was the best of a 45-configuration sweep, so part of the result
+  is selection bias. The robust finding is that *most* slow trend-following
+  configs on ETH were profitable, not the peak number.
+- Small implementation changes (e.g. warm-up window) shifted the annualized
+  result by ~16 points on the same data. Treat all figures as ±half.
+- 14 trades in 2 years: silence for weeks is normal operation.
+
 ## Hosted on Vercel (always running)
 
 Instead of the local loop, `api/tick.py` runs the same strategy as a Vercel
