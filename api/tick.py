@@ -96,12 +96,12 @@ def notify(text):
 # ---------------------------------------------------------------------------
 
 def run_tick():
-    pair_arg = os.environ.get("PAIR", "ETH/USD")
-    fast = int(os.environ.get("SMA_FAST", "20"))
-    slow = int(os.environ.get("SMA_SLOW", "30"))
-    usd = float(os.environ.get("USD_PER_TRADE", "50"))
-    stop_loss = float(os.environ.get("STOP_LOSS_PCT", "0"))
-    take_profit = float(os.environ.get("TAKE_PROFIT_PCT", "0"))
+    pair_arg = os.environ.get("PAIR") or "ETH/USD"
+    fast = int(os.environ.get("SMA_FAST") or 20)
+    slow = int(os.environ.get("SMA_SLOW") or 30)
+    usd = float(os.environ.get("USD_PER_TRADE") or 50)
+    stop_loss = float(os.environ.get("STOP_LOSS_PCT") or 0)
+    take_profit = float(os.environ.get("TAKE_PROFIT_PCT") or 0)
     live = os.environ.get("LIVE", "").lower() == "true"
 
     out = {
