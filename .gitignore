@@ -1,0 +1,7 @@
+bot_state.json
+bot.log
+.cron_secret_local
+.env*
+!.env.example
+.vercel
+__pycache__/
