@@ -101,18 +101,20 @@ ETH and lost on SOL — the asset choice matters more than the indicator.
 Instead of the local loop, `api/tick.py` runs the same strategy as a Vercel
 function triggered by Vercel Cron daily at 00:15 UTC — right after the daily
 candle closes, which is the only moment signals can change. Position state
-lives in Supabase; trade alerts go to Telegram.
+lives in a SQLite file (`state_store.py`); trade alerts go to Telegram.
+
+> **Serverless caveat:** Vercel functions can only write to `/tmp`, which is
+> wiped between invocations. With the default `BOT_DB_PATH`, every tick starts
+> with an empty database: the bot forgets an open position, so it never sells
+> it and can buy again on the next cross up. The tick response includes a
+> `state_warning` field whenever this applies. Either point `BOT_DB_PATH` at
+> storage that survives (a mounted volume, not Vercel's filesystem) or run the
+> bot where it has a real disk before setting `LIVE=true`.
 
 ### One-time setup
 
-1. **Supabase** — run this in the SQL editor of your project:
-   ```sql
-   create table if not exists bot_state (
-     key text primary key,
-     value jsonb,
-     updated_at timestamptz default now()
-   );
-   ```
+1. **State** — nothing to do; the SQLite file and its `bot_state` table are
+   created on first run. Set `BOT_DB_PATH` to choose where it lives.
 2. **Telegram** (optional) — message @BotFather → `/newbot` → copy the token.
    Send your new bot any message, then open
    `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id`.
@@ -124,8 +126,7 @@ lives in Supabase; trade alerts go to Telegram.
    | `PAIR` | `ETH/USD` |
    | `SMA_FAST` / `SMA_SLOW` | `20` / `30` |
    | `USD_PER_TRADE` | e.g. `50` |
-   | `SUPABASE_URL` | `https://<project>.supabase.co` |
-   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API |
+   | `BOT_DB_PATH` | SQLite file path (default `/tmp/bot_state.db` — see caveat) |
    | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | from step 2 |
    | `CRON_SECRET` | any random string (protects the endpoint) |
    | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | only when going live |

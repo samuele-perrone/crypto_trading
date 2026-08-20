@@ -6,3 +6,5 @@ bot.log
 .vercel
 __pycache__/
 .env*.local
+bot_state.db
+bot_state.db-journal

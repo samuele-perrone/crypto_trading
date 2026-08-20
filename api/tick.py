@@ -13,18 +13,14 @@ Called on a schedule (see vercel.json). Reads config from env vars:
     KRAKEN_API_KEY / KRAKEN_API_SECRET   required only when LIVE=true
     CRON_SECRET     if set, requests must carry Authorization: Bearer <secret>
 
-Position state is stored in Supabase (table `bot_state`), using:
+Position state is stored in a local SQLite file (table `bot_state`), created
+automatically on first use:
 
-    SUPABASE_URL                 e.g. https://xyz.supabase.co
-    SUPABASE_SERVICE_ROLE_KEY    service role key (server-side only)
+    BOT_DB_PATH     path to the SQLite file (default: bot_state.db in the repo)
 
-Create the table once in the Supabase SQL editor:
-
-    create table if not exists bot_state (
-      key text primary key,
-      value jsonb,
-      updated_at timestamptz default now()
-    );
+WARNING: on Vercel this defaults to /tmp/bot_state.db, which is wiped between
+invocations — the bot forgets any open position between ticks. Point
+BOT_DB_PATH at durable storage, or run the bot somewhere with a real disk.
 """
 
 import json
@@ -35,44 +31,9 @@ from http.server import BaseHTTPRequestHandler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from kraken_bot import KrakenClient, sma, crossover_signal  # noqa: E402
+from state_store import load_position, save_position, db_path, is_ephemeral  # noqa: E402
 
 import requests  # noqa: E402
-
-
-# ---------------------------------------------------------------------------
-# State storage: Supabase (bot_state table) over PostgREST
-# ---------------------------------------------------------------------------
-
-def _supabase_env():
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        raise RuntimeError("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set")
-    return url.rstrip("/"), {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
-
-
-def load_position(key):
-    url, headers = _supabase_env()
-    r = requests.get(f"{url}/rest/v1/bot_state",
-                     params={"key": f"eq.{key}", "select": "value"},
-                     headers=headers, timeout=10)
-    r.raise_for_status()
-    rows = r.json()
-    return rows[0]["value"] if rows else None
-
-
-def save_position(key, position):
-    url, headers = _supabase_env()
-    r = requests.post(f"{url}/rest/v1/bot_state",
-                      headers={**headers, "Prefer": "resolution=merge-duplicates"},
-                      json=[{"key": key, "value": position,
-                             "updated_at": datetime.now(timezone.utc).isoformat()}],
-                      timeout=10)
-    r.raise_for_status()
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +87,11 @@ def run_tick():
     state_key = f"kraken_bot:{pair['altname']}"
     position = load_position(state_key)
     out["position"] = position
+    out["state_db"] = db_path()
+    if is_ephemeral():
+        out["state_warning"] = ("SQLite file lives on ephemeral storage — any open "
+                                "position is forgotten between ticks. Set BOT_DB_PATH "
+                                "to durable storage.")
 
     def execute(side, volume, reason):
         if live:
