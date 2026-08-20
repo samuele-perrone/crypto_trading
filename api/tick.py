@@ -31,7 +31,8 @@ from http.server import BaseHTTPRequestHandler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from kraken_bot import KrakenClient, sma, crossover_signal  # noqa: E402
-from state_store import load_position, save_position, db_path, is_ephemeral  # noqa: E402
+from state_store import (load_position, save_position,  # noqa: E402
+                         state_location, is_ephemeral)
 
 import requests  # noqa: E402
 
@@ -87,11 +88,11 @@ def run_tick():
     state_key = f"kraken_bot:{pair['altname']}"
     position = load_position(state_key)
     out["position"] = position
-    out["state_db"] = db_path()
+    out["state_db"] = state_location()
     if is_ephemeral():
         out["state_warning"] = ("SQLite file lives on ephemeral storage — any open "
-                                "position is forgotten between ticks. Set BOT_DB_PATH "
-                                "to durable storage.")
+                                "position is forgotten between ticks. Set "
+                                "BLOB_READ_WRITE_TOKEN or BOT_DB_PATH.")
 
     def execute(side, volume, reason):
         if live:

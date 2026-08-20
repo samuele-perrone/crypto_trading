@@ -103,18 +103,30 @@ function triggered by Vercel Cron daily at 00:15 UTC — right after the daily
 candle closes, which is the only moment signals can change. Position state
 lives in a SQLite file (`state_store.py`); trade alerts go to Telegram.
 
-> **Serverless caveat:** Vercel functions can only write to `/tmp`, which is
-> wiped between invocations. With the default `BOT_DB_PATH`, every tick starts
-> with an empty database: the bot forgets an open position, so it never sells
-> it and can buy again on the next cross up. The tick response includes a
-> `state_warning` field whenever this applies. Either point `BOT_DB_PATH` at
-> storage that survives (a mounted volume, not Vercel's filesystem) or run the
-> bot where it has a real disk before setting `LIVE=true`.
+Vercel functions can only write to `/tmp`, which is wiped between invocations,
+so the SQLite file cannot simply sit on disk there. Instead it rests in a
+private **Vercel Blob** store between ticks: pulled before every read, pushed
+after every write. It is still an ordinary SQLite file — Blob is just where it
+lives when no function is running.
+
+- Reads use a cache-busting query param. Blob reads are CDN-cached and would
+  otherwise serve a stale file, and a stale position means a wrong trade.
+- A failed pull raises instead of returning "no position", so the tick fails
+  loudly (500 + Telegram alert) rather than trading on unknown state.
+- The object name defaults to `<VERCEL_ENV>/bot_state.db`, so a local test tick
+  writes to `development/…` and cannot clobber production's position.
 
 ### One-time setup
 
-1. **State** — nothing to do; the SQLite file and its `bot_state` table are
-   created on first run. Set `BOT_DB_PATH` to choose where it lives.
+1. **State** — create the Blob store once; it wires up `BLOB_READ_WRITE_TOKEN`
+   automatically:
+   ```sh
+   vercel blob create-store crypto-trading-state --access private
+   ```
+   The SQLite file and its `bot_state` table are created on first run. Without
+   a Blob token the bot falls back to a plain local file (`BOT_DB_PATH`), which
+   is correct off Vercel but ephemeral on it — the tick response carries a
+   `state_warning` when that applies.
 2. **Telegram** (optional) — message @BotFather → `/newbot` → copy the token.
    Send your new bot any message, then open
    `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id`.
@@ -126,7 +138,8 @@ lives in a SQLite file (`state_store.py`); trade alerts go to Telegram.
    | `PAIR` | `ETH/USD` |
    | `SMA_FAST` / `SMA_SLOW` | `20` / `30` |
    | `USD_PER_TRADE` | e.g. `50` |
-   | `BOT_DB_PATH` | SQLite file path (default `/tmp/bot_state.db` — see caveat) |
+   | `BLOB_READ_WRITE_TOKEN` | set automatically by `vercel blob create-store` |
+   | `BOT_BLOB_PATHNAME` | optional; default `<VERCEL_ENV>/bot_state.db` |
    | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | from step 2 |
    | `CRON_SECRET` | any random string (protects the endpoint) |
    | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | only when going live |
