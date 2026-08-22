@@ -10,6 +10,27 @@ dry-run gate as safety-critical. `README.md` documents the strategy and setup;
 `OPERATIONS.md` documents what is deployed, the runbook, and past decisions —
 read it before changing state storage or strategy rules.
 
+## Keep the docs current — required, not optional
+
+These files are the memory of this project. Update them **in the same commit**
+as the change, never as a follow-up:
+
+- **Changed what is deployed** (env vars, schedule, pair/SMA config, going
+  live, a new store or service) → update `OPERATIONS.md` "Current status" and
+  its "Last updated" date.
+- **Changed how something works** (state storage, tick flow, deploy path) →
+  update the matching `OPERATIONS.md` section and, if it changes an invariant
+  or an entry point, this file.
+- **Made a judgement call** (adopted or rejected a strategy rule, chose a
+  provider, ruled an approach out) → add it to `OPERATIONS.md` "Decisions" or
+  "Ideas not pursued", with the evidence and the date.
+- **Hit a trap that cost time** (CLI mangling a file, a misleading command, a
+  silent cache) → add it to `OPERATIONS.md` "Gotchas" so it is paid for once.
+- **Changed setup or usage** → update `README.md`.
+
+A change that leaves these stale is incomplete. If a doc claim turns out to be
+wrong, correct it rather than working around it.
+
 ## Commands
 
 There is no test suite, no linter, and no build step. Verification is done by
