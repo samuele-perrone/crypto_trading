@@ -145,12 +145,18 @@ lives when no function is running.
    | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | only when going live |
    | `LIVE` | unset = dry-run; `true` = real orders |
 
-4. Deploy: `vercel --prod`
+4. Deploy: pushing to `main` builds automatically; `vercel --prod --yes` is the
+   fallback.
 
 Test a tick manually:
 ```sh
 curl -H "Authorization: Bearer $CRON_SECRET" https://<your-app>.vercel.app/api/tick
 ```
+
+See **[OPERATIONS.md](OPERATIONS.md)** for what is currently deployed, the
+runbook (testing a tick, inspecting or clearing state, going live), the design
+decisions behind the state storage, and the CLI gotchas worth knowing before
+touching any of it.
 
 ## Warnings
 
