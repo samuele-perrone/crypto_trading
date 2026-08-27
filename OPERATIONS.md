@@ -5,7 +5,7 @@ Working notes for running this bot and picking the work back up later.
 deployed, how it behaves in production, why things are the way they are, and
 the traps that already cost time once.
 
-Last updated: 2026-08-22.
+Last updated: 2026-08-27.
 
 ## Current status
 
@@ -16,7 +16,12 @@ Last updated: 2026-08-22.
 - **Config:** ETH/USD, SMA 20/30 on daily candles, $100 per trade, no
   stop-loss, no take-profit.
 - **State:** private Vercel Blob store `crypto-trading-state`, object
-  `production/bot_state.db`. Currently empty (no open position).
+  `production/bot_state.db`.
+- **Open simulated position** since 2026-08-21 00:15 UTC: entry $2,332.51,
+  volume 0.04287227 (~$100), +7.11% at $2,498.45 on 2026-08-27. It closes on an
+  SMA cross down. This was the first signal the deployed bot produced, and it
+  confirms Blob persistence works in real operation — written by a cron tick,
+  intact across six days of cold invocations.
 - **Blocking going live:** the Kraken account holds ~$0.01 against a $100
   trade size. Fund it, verify the balance, then set `LIVE=true`.
 
