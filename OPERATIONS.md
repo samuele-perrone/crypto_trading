@@ -5,7 +5,7 @@ Working notes for running this bot and picking the work back up later.
 deployed, how it behaves in production, why things are the way they are, and
 the traps that already cost time once.
 
-Last updated: 2026-08-27.
+Last updated: 2026-09-11.
 
 ## Current status
 
@@ -13,40 +13,35 @@ Last updated: 2026-08-27.
 - **Mode:** dry-run. `LIVE` is unset in Vercel, so no real orders are placed.
 - **Schedule:** Vercel Cron, daily at 00:15 UTC (`vercel.json`), just after the
   daily candle closes — the only moment an SMA signal can change.
-- **Config:** ETH/USD, SMA 20/30 on daily candles, $100 per trade, no
-  stop-loss, no take-profit.
+- **Config:** ETH/USD, SMA 20/30 on daily candles, **$20 per trade**, no
+  stop-loss, no take-profit. The tick response echoes the effective
+  `usd_per_trade` and `sma`, since `vercel env ls` cannot show values.
 - **State:** private Vercel Blob store `crypto-trading-state`, object
   `production/bot_state.db`.
+- **Kraken account:** $65.81 USD, no ETH. API key verified end to end.
 - **Open simulated position** since 2026-08-21 00:15 UTC: entry $2,332.51,
-  volume 0.04287227 (~$100), +7.11% at $2,498.45 on 2026-08-27. It closes on an
-  SMA cross down. This was the first signal the deployed bot produced, and it
+  volume 0.04287227 (~$100 at the old trade size), around +5.6% in mid
+  September. This was the first signal the deployed bot produced, and it
   confirms Blob persistence works in real operation — written by a cron tick,
-  intact across six days of cold invocations.
-**Blocking going live (two things, both confirmed 2026-09-11):**
+  intact across weeks of cold invocations.
 
-1. ~~The Kraken API key cannot place orders.~~ **Resolved 2026-09-11** with a
-   new key; `rehearse_sell.py --validate` now returns
-   `sell 0.04261 ETHUSD @ market`. The original key was missing **Create &
-   Modify Orders** — caught by validate mode, invisible to dry-run, and it
-   would have failed on the first live signal.
-2. ~~The account holds the wrong currency.~~ **Resolved 2026-09-11** — GBP
-   converted, balance is **$65.85 USD**. (ETH/GBP was evaluated as the
-   alternative and backtested equivalently — +62.5%/yr vs +62.9%/yr, 10/10
-   configs profitable on both — but its book is 47× thinner with a 3× wider
-   spread. Staying on ETH/USD.)
-3. **`USD_PER_TRADE` is $100, above the $65.85 balance**, so a live buy would
-   fail on insufficient funds. Kraken's validate does not check balance, so
-   this would only appear when live. Lower it before going live — $20 also
-   limits the blast radius of the first real cycle.
-4. **The stored position must be cleared before going live.** State holds a
-   simulated ETH/USD position (entry $2,332.51) that was never actually
-   bought, so the bot's first real action would be a sell of coin it does not
-   hold. Delete `production/bot_state.db` in the same change that sets
-   `LIVE=true`.
+### Readiness for live
 
-Kraken's minimum for ETH/USD is 0.001 ETH (~$2.50), so the first live run can
-be $10–20 rather than $100. Lower `USD_PER_TRADE` for one full cycle, then
-raise it.
+Everything that can be tested without money has been, and one thing that
+could not was tested with 4 cents (see **Testing** below): strategy rules,
+the sell path, Kraken auth and permissions, and a real fill.
+
+Two steps remain, and they belong in the same change:
+
+1. **Clear the stored position.** It is simulated — the coin was never bought,
+   so the bot's first live action would be a sell of something it does not
+   hold. `vercel blob del production/bot_state.db --rw-token "$BLOB_READ_WRITE_TOKEN"`
+2. **Set `LIVE=true` and redeploy.** Env changes need a new deployment.
+
+Then expect to wait. SMA20 is currently well above SMA30, so a flat bot needs
+a cross down followed by a fresh cross up before it enters — plausibly weeks,
+on a strategy that traded 13 times in two years. The daily heartbeat is how
+you tell "waiting" from "broken".
 
 ## How a tick works
 
@@ -81,7 +76,7 @@ ordinary SQLite file with a `bot_state(key, value, updated_at)` table — Blob i
 only where it lives while no function is running. All of this is in
 `state_store.py`; `api/tick.py` just calls `load_position` / `save_position`.
 
-Three properties worth preserving if you touch that file:
+Four properties worth preserving if you touch that file:
 
 - **Reads are cache-busted.** Blob reads go through a CDN. A read seconds after
   an overwrite was observed returning the *previous* file (`x-vercel-cache:
@@ -137,13 +132,20 @@ GET https://<store-id-lowercased>.private.blob.vercel-storage.com/<pathname>?cb=
 
 The store id is the 4th underscore-separated field of the token
 (`vercel_blob_rw_<storeId>_<random>`), lowercased for the hostname — the same
-derivation the official SDK uses. A missing object returns 404, which the code
-treats as "no state yet". Without the bearer token the request returns 403,
-which is the point of a private store.
+derivation the official SDK uses. Without the bearer token the request returns
+403, which is the point of a private store. A 404 means "missing" only after
+the list API agrees; see the consistency note above.
+
+Existence check and delete:
+
+```
+GET  https://blob.vercel-storage.com/?prefix=<pathname>&limit=100
+POST https://blob.vercel-storage.com/delete   {"urls": ["<blob url>"]}
+```
 
 ## Testing
 
-Three layers, because each catches what the others cannot.
+Four layers, because each catches what the others cannot.
 
 **1. Deterministic rules** — `python3 -m unittest test_strategy test_state_store`
 
@@ -158,7 +160,8 @@ be held is not. Run both after touching `kraken_bot.py` or `state_store.py`.
 **2. End-to-end sell rehearsal** — `python3 rehearse_sell.py`
 
 Waiting for a real cross down can take weeks, so this seeds a position in an
-isolated Blob namespace (`development/rehearsal.db`), forces a take-profit, and
+isolated Blob namespace (`development/rehearsal-<timestamp>.db`, unique per run
+and deleted afterwards), forces a take-profit, and
 runs the real `run_tick()`. Proves the whole sell path — realized P&L, cleared
 state, and the push of that cleared state to Blob. It refuses to run against
 `production/` and stays silent on Telegram unless given `--notify`.
@@ -171,6 +174,15 @@ that exercises the credentials, and it immediately caught a key missing the
 order permission. Set `VALIDATE=true` in Vercel to run the deployed bot the
 same way. Caveat: Kraken's validate does not check balance, so "insufficient
 funds" still only surfaces when live.
+
+**4. Live smoke trade** — `python3 smoke_trade.py` (preview) / `--yes` (real)
+
+One real minimum-size round trip, ~$2.50 of exposure for a few seconds. The
+only test that reaches actual execution: balance sufficiency (Kraken's validate
+does not check funds), a real fill, a real txid, and any account-level
+restriction. Run on 2026-09-11: buy `OHJY5F-ZYV3R-QFRN5K`, sell
+`OAQ3MR-I2ZFH-CGPB5J`, total cost **3.95¢** on $2.46. Volume is always the
+exchange minimum and the script aborts above `MAX_COST_USD`.
 
 ### Modes
 
@@ -266,6 +278,16 @@ The same logic argues against a tight stop-loss — the worst trade was only
 −5.0%. `STOP_LOSS_PCT` is 0 and untested as of this date.
 
 ## Gotchas
+
+- **Freshly bought coin is not immediately sellable.** A smoke trade on
+  2026-09-11 bought 0.001 ETH, `Balance` reported the full `0.0010000000`, and
+  an immediate sell of that exact amount was rejected with
+  `EGeneral:Invalid arguments:volume minimum not met` — the settled balance was
+  briefly under the minimum. The same sell succeeded moments later. It does not
+  affect the bot (its buys and sells are a day apart, and a $20 trade is ~8×
+  the minimum), but any script that round-trips at the minimum must retry.
+- **Kraken charges the buy fee in USD, not in the coin.** 0.001 ETH bought
+  leaves exactly 0.001 ETH, so a sell of the full bought amount is correct.
 
 - **A Kraken key that reads fine may still not trade.** `Balance` succeeding
   proves only the key and signing, not the order permission — those are
