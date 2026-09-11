@@ -75,6 +75,11 @@ def run_tick():
         "time": datetime.now(timezone.utc).isoformat(),
         "pair": pair_arg,
         "mode": "live" if live else ("validate" if validate else "dry-run"),
+        # Echo the effective config: env values are not readable from
+        # `vercel env ls`, and this is the number that decides how much money
+        # moves. Without it, a mis-set trade size is invisible until it fills.
+        "usd_per_trade": usd,
+        "sma": f"{fast}/{slow}",
         "action": "none",
     }
 
