@@ -23,8 +23,12 @@ Requires BLOB_READ_WRITE_TOKEN (load it from .env.local first).
 import argparse
 import os
 import sys
+import time
 
-PATHNAME = "development/rehearsal.db"
+# Unique per run. Blob writes are eventually consistent, and a pathname that
+# was recently deleted can keep 404-ing for a while; a fresh name sidesteps
+# both, and the object is deleted again at the end.
+PATHNAME = f"development/rehearsal-{int(time.time())}.db"
 
 
 def main():
@@ -57,7 +61,8 @@ def main():
 
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "api"))
     from kraken_bot import KrakenClient
-    from state_store import load_position, save_position, state_location
+    from state_store import (load_position, save_position, state_location,
+                             delete_blob)
     from tick import run_tick
 
     client = KrakenClient()
@@ -71,7 +76,17 @@ def main():
           f"(+{args.gain:.1f}%), take-profit {os.environ['TAKE_PROFIT_PCT']}%")
     save_position(key, {"volume": round(100 / entry, pair["lot_decimals"]),
                         "entry": entry})
-    assert load_position(key) is not None, "seed did not persist"
+
+    # Blob is read-after-write eventually consistent. Production never reads
+    # its own write (it saves at the end of a tick and reads a day later), but
+    # this script does, so wait for the seed to become visible rather than
+    # mistaking the lag for a broken sell path.
+    for attempt in range(10):
+        if load_position(key) is not None:
+            break
+        time.sleep(1)
+    else:
+        sys.exit("seed never became visible in Blob; aborting rehearsal")
 
     print("running the real tick...\n")
     out = run_tick()
@@ -96,9 +111,12 @@ def main():
     print("  sell path OK" if ok else "  sell path BROKEN")
 
     # Leave no rehearsal state behind.
-    save_position(key, None)
-    print(f"\ncleanup    : {PATHNAME} cleared "
-          f"(delete it with: vercel blob del {PATHNAME} --rw-token $BLOB_READ_WRITE_TOKEN)")
+    try:
+        delete_blob()
+        print(f"\ncleanup    : deleted {PATHNAME}")
+    except Exception as e:
+        print(f"\ncleanup    : could not delete {PATHNAME} ({e}) - remove it with "
+              f"`vercel blob del {PATHNAME} --rw-token $BLOB_READ_WRITE_TOKEN`")
     sys.exit(0 if ok else 1)
 
 

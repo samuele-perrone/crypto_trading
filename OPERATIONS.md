@@ -24,13 +24,16 @@ Last updated: 2026-08-27.
   intact across six days of cold invocations.
 **Blocking going live (two things, both confirmed 2026-09-11):**
 
-1. **The Kraken API key cannot place orders.** `AddOrder` returns
-   `EGeneral:Permission denied` while `Balance` and `OpenOrders` succeed — so
-   the key and request signing are fine, it is simply missing the **Create &
-   Modify Orders** permission. Fix at kraken.com → Settings → API → edit the
-   key. Found by validate mode; dry-run cannot detect this, and live trading
-   would have failed on the first signal.
-2. **The account is unfunded** — $0.01 USD against a $100 trade size.
+1. ~~The Kraken API key cannot place orders.~~ **Resolved 2026-09-11** with a
+   new key; `rehearse_sell.py --validate` now returns
+   `sell 0.04261 ETHUSD @ market`. The original key was missing **Create &
+   Modify Orders** — caught by validate mode, invisible to dry-run, and it
+   would have failed on the first live signal.
+2. **The account holds the wrong currency.** Balance is £50 GBP (`ZGBP`) and
+   $0.01 USD. The bot trades `ETH/USD` and sizes from the USD balance, so a buy
+   would fail on insufficient funds. Either convert GBP→USD on Kraken, or set
+   `PAIR=ETH/GBP` (valid pair, same 0.001 ETH minimum) and re-run the
+   backtest — the strategy was only ever validated against ETH/USD.
 
 Kraken's minimum for ETH/USD is 0.001 ETH (~$2.50), so the first live run can
 be $10–20 rather than $100. Lower `USD_PER_TRADE` for one full cycle, then
@@ -79,6 +82,12 @@ Three properties worth preserving if you touch that file:
   database, because "no position" is exactly the dangerous wrong answer — it
   makes the bot buy again while already holding. A failed tick returns 500 and
   fires a Telegram alert instead.
+- **A 404 is not believed on its own.** Blob reads are eventually consistent:
+  an object that definitely existed returned 404 on roughly **one read in
+  eight** during testing. Since 404 previously meant "no state yet", that was a
+  live path to the exact failure the store is meant to prevent. Absence is now
+  confirmed against the list API (`GET /?prefix=…`, not CDN-cached); a 404 for
+  an object that does exist is retried and then raised.
 - **Environments are separated.** The object name defaults to
   `<VERCEL_ENV>/bot_state.db`, so a local test tick writes `development/…` and
   cannot clobber production's position.
@@ -127,13 +136,15 @@ which is the point of a private store.
 
 Three layers, because each catches what the others cannot.
 
-**1. Deterministic rules** — `python3 -m unittest test_strategy`
+**1. Deterministic rules** — `python3 -m unittest test_strategy test_state_store`
 
-No network, no keys, runs in a second. Covers when to buy, when to sell, and
-how much: crossover edges (the signal must fire once, not every day of a
-trend), stop-loss and take-profit thresholds and their precedence, `0` meaning
-"disabled" rather than "sell at breakeven", and rounding that never overspends
-the stake. Run it after touching anything in `kraken_bot.py`.
+No network, no keys, runs in a second. `test_strategy` covers when to buy, when
+to sell, and how much: crossover edges (the signal must fire once, not every
+day of a trend), stop-loss and take-profit thresholds and their precedence, `0`
+meaning "disabled" rather than "sell at breakeven", and rounding that never
+overspends the stake. `test_state_store` stubs HTTP and pins the one-directional
+safety property — failing loudly is fine, reporting "no position" when one may
+be held is not. Run both after touching `kraken_bot.py` or `state_store.py`.
 
 **2. End-to-end sell rehearsal** — `python3 rehearse_sell.py`
 

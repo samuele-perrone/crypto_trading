@@ -31,6 +31,8 @@ import requests
 _BLOB_API = "https://blob.vercel-storage.com"
 _BLOB_API_VERSION = "12"
 _TIMEOUT = 15
+_PULL_RETRIES = 3      # extra reads when a 404 contradicts the list API
+_RETRY_SLEEP = 1.0     # seconds, multiplied by the attempt number
 
 _REPO_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_state.db")
 
@@ -61,23 +63,75 @@ def _blob_url(token):
     return f"https://{store_id}.private.blob.vercel-storage.com/{_blob_pathname()}"
 
 
-def _pull(path):
-    """Fetch the SQLite file from Blob. Returns False when none is stored yet."""
+def _blob_exists():
+    """Authoritative existence check via the list API (not the cached CDN read)."""
     token = _token()
-    r = requests.get(_blob_url(token),
-                     headers={"Authorization": f"Bearer {token}"},
-                     # Blob reads are CDN-cached and will serve a stale file
-                     # otherwise -- a stale position is a wrong trade.
-                     params={"cb": str(time.time_ns())},
+    pathname = _blob_pathname()
+    r = requests.get(f"{_BLOB_API}/",
+                     params={"prefix": pathname, "limit": "100"},
+                     headers={"Authorization": f"Bearer {token}",
+                              "x-api-version": _BLOB_API_VERSION},
                      timeout=_TIMEOUT)
-    if r.status_code == 404:
+    r.raise_for_status()
+    return any(b.get("pathname") == pathname for b in r.json().get("blobs", []))
+
+
+def _get_blob(token):
+    return requests.get(_blob_url(token),
+                        headers={"Authorization": f"Bearer {token}"},
+                        # Blob reads are CDN-cached and will serve a stale file
+                        # otherwise -- a stale position is a wrong trade.
+                        params={"cb": str(time.time_ns())},
+                        timeout=_TIMEOUT)
+
+
+def _pull(path):
+    """Fetch the SQLite file from Blob. Returns False when none is stored yet.
+
+    Blob reads are eventually consistent: an object that definitely exists was
+    observed returning 404 on roughly one read in eight. A 404 is therefore
+    never taken at face value, because "no state" is the dangerous wrong
+    answer -- it makes the bot buy again while already holding, and never sell
+    what it holds. Absence is confirmed against the list API, and a 404 for an
+    object that does exist is retried and then raised.
+    """
+    token = _token()
+    r = _get_blob(token)
+    if r.status_code == 200:
+        with open(path, "wb") as f:
+            f.write(r.content)
+        return True
+    if r.status_code != 404:
+        r.raise_for_status()
+
+    if not _blob_exists():
+        # Genuinely nothing stored yet (first run, or state deliberately cleared).
         if os.path.exists(path):
             os.remove(path)  # don't let a leftover /tmp copy masquerade as state
         return False
+
+    for attempt in range(_PULL_RETRIES):
+        time.sleep(_RETRY_SLEEP * (attempt + 1))
+        r = _get_blob(token)
+        if r.status_code == 200:
+            with open(path, "wb") as f:
+                f.write(r.content)
+            return True
+    raise RuntimeError(
+        f"{_blob_pathname()} exists but returned 404 on "
+        f"{_PULL_RETRIES + 1} reads; refusing to assume there is no position"
+    )
+
+
+def delete_blob():
+    """Remove the stored state object entirely. Used by the rehearsal cleanup."""
+    token = _token()
+    r = requests.post(f"{_BLOB_API}/delete",
+                      headers={"Authorization": f"Bearer {token}",
+                               "x-api-version": _BLOB_API_VERSION,
+                               "Content-Type": "application/json"},
+                      json={"urls": [_blob_url(token)]}, timeout=_TIMEOUT)
     r.raise_for_status()
-    with open(path, "wb") as f:
-        f.write(r.content)
-    return True
 
 
 def _push(path):
