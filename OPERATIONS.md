@@ -29,11 +29,20 @@ Last updated: 2026-08-27.
    `sell 0.04261 ETHUSD @ market`. The original key was missing **Create &
    Modify Orders** — caught by validate mode, invisible to dry-run, and it
    would have failed on the first live signal.
-2. **The account holds the wrong currency.** Balance is £50 GBP (`ZGBP`) and
-   $0.01 USD. The bot trades `ETH/USD` and sizes from the USD balance, so a buy
-   would fail on insufficient funds. Either convert GBP→USD on Kraken, or set
-   `PAIR=ETH/GBP` (valid pair, same 0.001 ETH minimum) and re-run the
-   backtest — the strategy was only ever validated against ETH/USD.
+2. ~~The account holds the wrong currency.~~ **Resolved 2026-09-11** — GBP
+   converted, balance is **$65.85 USD**. (ETH/GBP was evaluated as the
+   alternative and backtested equivalently — +62.5%/yr vs +62.9%/yr, 10/10
+   configs profitable on both — but its book is 47× thinner with a 3× wider
+   spread. Staying on ETH/USD.)
+3. **`USD_PER_TRADE` is $100, above the $65.85 balance**, so a live buy would
+   fail on insufficient funds. Kraken's validate does not check balance, so
+   this would only appear when live. Lower it before going live — $20 also
+   limits the blast radius of the first real cycle.
+4. **The stored position must be cleared before going live.** State holds a
+   simulated ETH/USD position (entry $2,332.51) that was never actually
+   bought, so the bot's first real action would be a sell of coin it does not
+   hold. Delete `production/bot_state.db` in the same change that sets
+   `LIVE=true`.
 
 Kraken's minimum for ETH/USD is 0.001 ETH (~$2.50), so the first live run can
 be $10–20 rather than $100. Lower `USD_PER_TRADE` for one full cycle, then
