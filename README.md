@@ -138,6 +138,7 @@ lives when no function is running.
    | `PAIR` | `ETH/USD` |
    | `SMA_FAST` / `SMA_SLOW` | `20` / `30` |
    | `USD_PER_TRADE` | e.g. `50` |
+   | `TRADE_PCT` | optional; size as a % of USD balance so gains compound |
    | `BLOB_READ_WRITE_TOKEN` | set automatically by `vercel blob create-store` |
    | `BOT_BLOB_PATHNAME` | optional; default `<VERCEL_ENV>/bot_state.db` |
    | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | from step 2 |

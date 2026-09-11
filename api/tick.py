@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from kraken_bot import (KrakenClient, sma, crossover_signal,  # noqa: E402
-                        sell_reason, buy_volume)
+                        sell_reason, buy_volume, trade_stake)
 from state_store import (load_position, save_position,  # noqa: E402
                          state_location, is_ephemeral)
 
@@ -63,6 +63,9 @@ def run_tick():
     fast = int(os.environ.get("SMA_FAST") or 20)
     slow = int(os.environ.get("SMA_SLOW") or 30)
     usd = float(os.environ.get("USD_PER_TRADE") or 50)
+    # TRADE_PCT sizes from the live USD balance instead of a fixed amount, so
+    # gains compound as the account grows. 0/unset keeps the fixed stake.
+    trade_pct = float(os.environ.get("TRADE_PCT") or 0)
     stop_loss = float(os.environ.get("STOP_LOSS_PCT") or 0)
     take_profit = float(os.environ.get("TAKE_PROFIT_PCT") or 0)
     live = os.environ.get("LIVE", "").lower() == "true"
@@ -127,15 +130,32 @@ def run_tick():
                    f"[{out['mode']}]")
     else:
         if signal == "buy":
-            volume = buy_volume(usd, price, pair["lot_decimals"])
+            # Size against the real balance when we can see it. A stake equal
+            # to the balance always fails -- the taker fee pushes the cost
+            # above it -- so this caps rather than letting the order bounce.
+            balance = None
+            if client.api_key and client.api_secret:
+                try:
+                    funds = client.balances()
+                    balance = funds.get("ZUSD", funds.get("USD", 0.0))
+                    out["usd_available"] = round(balance, 2)
+                except Exception as e:
+                    out["balance_check"] = f"unavailable: {e}"
+            stake = trade_stake(usd, trade_pct, balance)
+            if stake < usd:
+                out["stake_capped_from"] = usd
+            out["stake"] = round(stake, 2)
+
+            volume = buy_volume(stake, price, pair["lot_decimals"])
             if volume < pair["ordermin"]:
                 out["action"] = (f"buy skipped: {volume} below Kraken minimum "
-                                 f"{pair['ordermin']} — increase USD_PER_TRADE")
+                                 f"{pair['ordermin']} — raise USD_PER_TRADE or "
+                                 f"fund the account")
             else:
                 execute("buy", volume, "SMA cross up")
                 save_position(state_key, {"volume": volume, "entry": price})
                 notify(f"🟢 BOUGHT {volume} {pair_arg} @ ${price:,.2f} "
-                       f"(~${usd:.2f}) [{out['mode']}]")
+                       f"(~${stake:.2f}) [{out['mode']}]")
 
     # Daily proof-of-life when nothing traded (disable with DAILY_REPORT=false)
     if out["action"] == "none" and os.environ.get("DAILY_REPORT", "true").lower() != "false":

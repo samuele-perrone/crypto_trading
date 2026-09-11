@@ -56,6 +56,43 @@ a cross down followed by a fresh cross up before it enters — plausibly weeks,
 on a strategy that traded 13 times in two years. The daily heartbeat is how
 you tell "waiting" from "broken".
 
+## Scaling the trade size
+
+Currently **$20**, deliberately small until one full live cycle has completed.
+The code is ready for more; raising it is an env change plus a redeploy.
+
+```sh
+vercel env rm USD_PER_TRADE production --yes
+echo "64" | vercel env add USD_PER_TRADE production
+git commit --allow-empty -m "raise trade size" && git push
+```
+
+Three things make a larger size safe, all in `kraken_bot.py` and covered by
+tests:
+
+- **You cannot spend the whole balance.** A $65.81 stake costs $65.81 plus the
+  0.26% taker fee = $65.98, more than the balance, and the order is rejected.
+  `affordable_usd()` derives the real ceiling, and `trade_stake()` caps every
+  stake to it — so an over-sized `USD_PER_TRADE` is clamped rather than
+  bouncing. The tick reports `usd_available`, `stake`, and `stake_capped_from`
+  when that happens.
+- **`TRADE_PCT` compounds.** A fixed dollar amount stays fixed as the account
+  grows; set `TRADE_PCT=90` to size from the live balance instead. The same
+  fee cap applies.
+- **The balance is read before buying.** Kraken's validate does not check
+  funds, so this is the only pre-flight that catches underfunding. If the
+  balance call fails the tick proceeds and lets the order fail loudly — the
+  reported `balance_check` field says so.
+
+Diversifying across coins was considered and rejected on 2026-09-11: the
+strategy's result swings from −27%/yr (LTC) to +79%/yr (XRP) by asset, but
+daily returns correlate **0.74** on average (0.83 with BTC), so a basket
+spreads the same bet rather than reducing risk. Equal-weighting all ten tested
+pairs returned +16.8%/yr against ETH's +62.9% — though that gap flatters ETH,
+which was chosen partly because it won. Revisit only if the account grows
+enough that variance matters more than the added complexity of multi-pair
+state.
+
 ## How a tick works
 
 `api/tick.py` is the whole production path. One HTTP GET = one strategy tick.

@@ -13,9 +13,7 @@ Usage:
 import argparse
 from datetime import datetime, timezone
 
-from kraken_bot import KrakenClient, sma
-
-TAKER_FEE = 0.0026  # 0.26% per side
+from kraken_bot import KrakenClient, sma, TAKER_FEE  # noqa: F401 (re-exported)
 
 
 def fetch_candles(client, pair_name, interval):

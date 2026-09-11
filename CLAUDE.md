@@ -110,6 +110,10 @@ recorded in `OPERATIONS.md`.
 - **Sell rules live in `sell_reason()`** in `kraken_bot.py`, shared by the
   local loop and the deployed tick. Change them there, not inline in either
   caller, or the two paths drift.
+- **Position sizing goes through `trade_stake()`**, never `usd / price`
+  directly. A stake equal to the balance always fails — the taker fee pushes
+  the cost above it — so every stake is capped by `affordable_usd()`.
+  `TRADE_PCT` sizes from the live balance instead of a fixed amount.
 - **Notifications must never break trading.** `notify()` swallows exceptions by
   design.
 - **Config reads treat empty env vars as unset** (`os.environ.get(X) or

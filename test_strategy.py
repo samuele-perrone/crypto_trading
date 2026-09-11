@@ -12,7 +12,8 @@ every build in a second.
 
 import unittest
 
-from kraken_bot import sma, crossover_signal, sell_reason, buy_volume
+from kraken_bot import (sma, crossover_signal, sell_reason, buy_volume,
+                        affordable_usd, trade_stake, TAKER_FEE)
 
 
 def ramp(start, step, n):
@@ -118,6 +119,43 @@ class TestBuyVolume(unittest.TestCase):
         """Rounding up would try to spend more USD than intended."""
         for usd, price in [(100, 2999.99), (50, 1234.56), (10, 987.65)]:
             self.assertLessEqual(buy_volume(usd, price, 4) * price, usd * 1.001)
+
+
+class TestStakeSizing(unittest.TestCase):
+    """Sizing has to survive being raised toward the whole balance."""
+
+    def test_full_balance_stake_is_capped_below_the_balance(self):
+        """Spending the balance fails: the fee pushes the cost above it."""
+        balance = 65.81
+        stake = trade_stake(balance, 0, balance)
+        self.assertLess(stake, balance)
+        self.assertLessEqual(stake * (1 + TAKER_FEE), balance)
+
+    def test_small_stake_is_left_alone(self):
+        self.assertEqual(trade_stake(20, 0, 65.81), 20)
+
+    def test_unknown_balance_uses_the_configured_amount(self):
+        """Dry-run without keys cannot see funds; the exchange enforces it."""
+        self.assertEqual(trade_stake(20, 0, None), 20)
+
+    def test_percentage_sizing_scales_with_the_balance(self):
+        self.assertAlmostEqual(trade_stake(20, 50, 100), 50, places=2)
+        self.assertAlmostEqual(trade_stake(20, 50, 200), 100, places=2)
+
+    def test_percentage_sizing_still_capped_by_fees(self):
+        stake = trade_stake(20, 100, 65.81)
+        self.assertLessEqual(stake * (1 + TAKER_FEE), 65.81)
+
+    def test_affordable_leaves_room_for_the_fee(self):
+        for balance in (10, 65.81, 1000):
+            self.assertLessEqual(affordable_usd(balance) * (1 + TAKER_FEE), balance)
+
+    def test_stake_never_exceeds_balance_for_any_config(self):
+        for configured in (5, 20, 64, 100, 10_000):
+            for pct in (0, 10, 50, 100):
+                stake = trade_stake(configured, pct, 65.81)
+                self.assertLessEqual(stake * (1 + TAKER_FEE), 65.81,
+                                     f"configured={configured} pct={pct}")
 
 
 if __name__ == "__main__":
