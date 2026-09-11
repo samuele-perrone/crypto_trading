@@ -81,7 +81,10 @@ def run_tick():
         # Echo the effective config: env values are not readable from
         # `vercel env ls`, and this is the number that decides how much money
         # moves. Without it, a mis-set trade size is invisible until it fills.
-        "usd_per_trade": usd,
+        "sizing": (f"{trade_pct:g}% of USD balance" if trade_pct
+                   else f"fixed ${usd:g}"),
+        "usd_per_trade": usd,      # fallback when the balance cannot be read
+        "trade_pct": trade_pct,
         "sma": f"{fast}/{slow}",
         "action": "none",
     }

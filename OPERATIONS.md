@@ -15,9 +15,12 @@ Last updated: 2026-09-11.
   bot started flat and enters only on a fresh cross up.
 - **Schedule:** Vercel Cron, daily at 00:15 UTC (`vercel.json`), just after the
   daily candle closes — the only moment an SMA signal can change.
-- **Config:** ETH/USD, SMA 20/30 on daily candles, **$20 per trade**, no
-  stop-loss, no take-profit. The tick response echoes the effective
-  `usd_per_trade` and `sma`, since `vercel env ls` cannot show values.
+- **Config:** ETH/USD, SMA 20/30 on daily candles, no stop-loss, no
+  take-profit. **Sizing: `TRADE_PCT=100`** — every buy uses the whole USD
+  balance, less the fee headroom (at $65.81 that is a $65.31 stake costing
+  $65.48). `USD_PER_TRADE=20` remains only as the fallback for when the
+  balance cannot be read. The tick echoes `sizing`, `trade_pct` and
+  `usd_per_trade`, since `vercel env ls` cannot show values.
 - **State:** private Vercel Blob store `crypto-trading-state`, object
   `production/bot_state.db`.
 - **Kraken account:** $65.81 USD, no ETH. API key verified end to end.
@@ -58,14 +61,24 @@ you tell "waiting" from "broken".
 
 ## Scaling the trade size
 
-Currently **$20**, deliberately small until one full live cycle has completed.
-The code is ready for more; raising it is an env change plus a redeploy.
+**Set to `TRADE_PCT=100` on 2026-09-11**: every buy uses the whole USD balance
+rather than a fixed amount, so gains compound with no further changes. This is
+intended to be the last sizing change — the stake tracks the balance by
+itself.
+
+It also means the entire account rides on every trade, with no reserve. That
+is defensible for this strategy (worst historical trade −5.0%, max drawdown
+−4.7%) but it is a real choice, not a default. To dial back, set `TRADE_PCT`
+to a smaller percentage; to pin a fixed amount, set `TRADE_PCT=0` and use
+`USD_PER_TRADE`.
 
 ```sh
-vercel env rm USD_PER_TRADE production --yes
-echo "64" | vercel env add USD_PER_TRADE production
-git commit --allow-empty -m "raise trade size" && git push
+echo "50" | vercel env add TRADE_PCT production   # or 0 for a fixed stake
+git commit --allow-empty -m "adjust sizing" && git push
 ```
+
+Note the account must hold only money intended for trading: at 100% the bot
+will spend USD deposited for any other purpose.
 
 Three things make a larger size safe, all in `kraken_bot.py` and covered by
 tests:
