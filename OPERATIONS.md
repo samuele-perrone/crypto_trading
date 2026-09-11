@@ -10,7 +10,9 @@ Last updated: 2026-09-11.
 ## Current status
 
 - **Live URL:** `https://cryptotrading-omega.vercel.app/api/tick`
-- **Mode:** dry-run. `LIVE` is unset in Vercel, so no real orders are placed.
+- **Mode: LIVE since 2026-09-11.** `LIVE=true` in Vercel production — real
+  market orders. The simulated position was deleted in the same change, so the
+  bot started flat and enters only on a fresh cross up.
 - **Schedule:** Vercel Cron, daily at 00:15 UTC (`vercel.json`), just after the
   daily candle closes — the only moment an SMA signal can change.
 - **Config:** ETH/USD, SMA 20/30 on daily candles, **$20 per trade**, no
@@ -24,6 +26,17 @@ Last updated: 2026-09-11.
   September. This was the first signal the deployed bot produced, and it
   confirms Blob persistence works in real operation — written by a cron tick,
   intact across weeks of cold invocations.
+
+### Going live — what to watch
+
+- **The daily 📊 heartbeat must keep arriving.** Errors inside a tick are
+  caught and sent as ⚠️ Telegram alerts, but a failure *outside* the handler —
+  an import error on cold start, a broken deployment, or cron not firing at
+  all — sends nothing. Silence is the only symptom of that class, which is why
+  the heartbeat exists. Missing heartbeats mean broken, not "no signal".
+- **The first 🟢 BOUGHT alert should carry a `txid`.** Dry-run alerts never do.
+- **Stop condition:** a buy that fills but does not persist, or two buys with
+  no sell between them. Unset `LIVE` and redeploy to halt immediately.
 
 ### Readiness for live
 
