@@ -144,6 +144,7 @@ lives when no function is running.
    | `CRON_SECRET` | any random string (protects the endpoint) |
    | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | only when going live |
    | `LIVE` | unset = dry-run; `true` = real orders |
+   | `VALIDATE` | `true` = send orders to Kraken with `validate=true` (nothing placed) |
 
 4. Deploy: pushing to `main` builds automatically; `vercel --prod --yes` is the
    fallback.

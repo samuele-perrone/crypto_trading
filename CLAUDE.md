@@ -33,10 +33,18 @@ wrong, correct it rather than working around it.
 
 ## Commands
 
-There is no test suite, no linter, and no build step. Verification is done by
-running the backtester and by dry-run ticks against live Kraken data.
+No linter, no build step. Tests are stdlib `unittest` — no pytest, no dev
+dependencies.
 
 ```sh
+# Strategy rules: deterministic, no network, run after touching kraken_bot.py
+python3 -m unittest test_strategy
+python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
+
+# Rehearse a full sell without waiting for the market (isolated Blob namespace)
+python3 rehearse_sell.py
+python3 rehearse_sell.py --validate   # + round-trip the order through Kraken
+
 # Dry-run the local loop (no keys needed, no real orders)
 python3 kraken_bot.py --pair ETH/USD --usd 100
 
@@ -95,7 +103,13 @@ recorded in `OPERATIONS.md`.
   final candle. Do not "fix" this — it prevents intraday signal flicker.
 - **Dry-run is the default everywhere.** `LIVE`/`--live` gates only the Kraken
   order call; every other code path runs identically so dry-run exercises the
-  real logic, including state writes.
+  real logic, including state writes. `VALIDATE=true` is the middle mode —
+  a real `AddOrder` with `validate=true`, nothing placed. It is the only way to
+  test credentials, and dry-run provably cannot: a key that reads balances fine
+  may still lack order permission.
+- **Sell rules live in `sell_reason()`** in `kraken_bot.py`, shared by the
+  local loop and the deployed tick. Change them there, not inline in either
+  caller, or the two paths drift.
 - **Notifications must never break trading.** `notify()` swallows exceptions by
   design.
 - **Config reads treat empty env vars as unset** (`os.environ.get(X) or

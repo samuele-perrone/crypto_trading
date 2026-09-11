@@ -30,7 +30,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from kraken_bot import KrakenClient, sma, crossover_signal  # noqa: E402
+from kraken_bot import (KrakenClient, sma, crossover_signal,  # noqa: E402
+                        sell_reason, buy_volume)
 from state_store import (load_position, save_position,  # noqa: E402
                          state_location, is_ephemeral)
 
@@ -65,11 +66,15 @@ def run_tick():
     stop_loss = float(os.environ.get("STOP_LOSS_PCT") or 0)
     take_profit = float(os.environ.get("TAKE_PROFIT_PCT") or 0)
     live = os.environ.get("LIVE", "").lower() == "true"
+    # VALIDATE sends the order to Kraken with validate=true: real auth, real
+    # signing, real pair/volume checks, but nothing is ever placed. It is the
+    # only way to exercise the credentials before money is at risk.
+    validate = not live and os.environ.get("VALIDATE", "").lower() == "true"
 
     out = {
         "time": datetime.now(timezone.utc).isoformat(),
         "pair": pair_arg,
-        "mode": "live" if live else "dry-run",
+        "mode": "live" if live else ("validate" if validate else "dry-run"),
         "action": "none",
     }
 
@@ -98,29 +103,26 @@ def run_tick():
         if live:
             result = client.market_order(pair["name"], side, volume)
             out["txid"] = result.get("txid")
+        elif validate:
+            result = client.market_order(pair["name"], side, volume, validate=True)
+            out["validated"] = result.get("descr", True)
         out["action"] = f"{side} ({reason})"
         out["volume"] = volume
 
     if position:
         change_pct = (price / position["entry"] - 1) * 100
         out["unrealized_pct"] = round(change_pct, 2)
-        sell_reason = None
-        if stop_loss and change_pct <= -stop_loss:
-            sell_reason = "stop-loss"
-        elif take_profit and change_pct >= take_profit:
-            sell_reason = "take-profit"
-        elif signal == "sell":
-            sell_reason = "SMA cross down"
-        if sell_reason:
-            execute("sell", position["volume"], sell_reason)
+        reason = sell_reason(position, price, stop_loss, take_profit, signal)
+        if reason:
+            execute("sell", position["volume"], reason)
             out["realized_pct"] = round(change_pct, 2)
             save_position(state_key, None)
             notify(f"🔴 SOLD {position['volume']} {pair_arg} @ ${price:,.2f} "
-                   f"({sell_reason})\nPnL: {change_pct:+.2f}% "
+                   f"({reason})\nPnL: {change_pct:+.2f}% "
                    f"[{out['mode']}]")
     else:
         if signal == "buy":
-            volume = round(usd / price, pair["lot_decimals"])
+            volume = buy_volume(usd, price, pair["lot_decimals"])
             if volume < pair["ordermin"]:
                 out["action"] = (f"buy skipped: {volume} below Kraken minimum "
                                  f"{pair['ordermin']} — increase USD_PER_TRADE")

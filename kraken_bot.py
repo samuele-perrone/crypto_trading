@@ -139,6 +139,28 @@ def sma(values, n):
     return sum(values[-n:]) / n
 
 
+def sell_reason(position, price, stop_loss, take_profit, signal):
+    """Why an open position should close now, or None to keep holding.
+
+    Shared by the local loop and the deployed tick so the two cannot drift.
+    Order matters: a stop-loss wins over a take-profit when a single candle
+    spans both, which is the conservative reading.
+    """
+    change_pct = (price / position["entry"] - 1) * 100
+    if stop_loss and change_pct <= -stop_loss:
+        return "stop-loss"
+    if take_profit and change_pct >= take_profit:
+        return "take-profit"
+    if signal == "sell":
+        return "SMA cross down"
+    return None
+
+
+def buy_volume(usd, price, lot_decimals):
+    """Volume a given USD stake buys, rounded to the pair's lot precision."""
+    return round(usd / price, lot_decimals)
+
+
 def crossover_signal(closes, fast_n, slow_n):
     """Return 'buy', 'sell', or None based on the last two closed candles."""
     if len(closes) < slow_n + 1:
@@ -231,18 +253,18 @@ def run(args):
 
             if position:
                 change_pct = (price / position["entry"] - 1) * 100
-                if args.stop_loss and change_pct <= -args.stop_loss:
-                    place("sell", position["volume"], price, f"stop-loss {change_pct:.2f}%")
-                elif args.take_profit and change_pct >= args.take_profit:
-                    place("sell", position["volume"], price, f"take-profit {change_pct:.2f}%")
-                elif signal == "sell":
-                    place("sell", position["volume"], price, "SMA cross down")
+                reason = sell_reason(position, price, args.stop_loss,
+                                     args.take_profit, signal)
+                if reason:
+                    detail = (reason if reason == "SMA cross down"
+                              else f"{reason} {change_pct:.2f}%")
+                    place("sell", position["volume"], price, detail)
                 else:
                     log(f"Holding | price ${price:.2f} | entry "
                         f"${position['entry']:.2f} | {change_pct:+.2f}%")
             else:
                 if signal == "buy":
-                    volume = round(args.usd / price, pair["lot_decimals"])
+                    volume = buy_volume(args.usd, price, pair["lot_decimals"])
                     if volume < pair["ordermin"]:
                         log(f"Buy signal, but ${args.usd:.2f} buys {volume} "
                             f"< Kraken minimum {pair['ordermin']}. Increase --usd.")

@@ -22,8 +22,19 @@ Last updated: 2026-08-27.
   SMA cross down. This was the first signal the deployed bot produced, and it
   confirms Blob persistence works in real operation — written by a cron tick,
   intact across six days of cold invocations.
-- **Blocking going live:** the Kraken account holds ~$0.01 against a $100
-  trade size. Fund it, verify the balance, then set `LIVE=true`.
+**Blocking going live (two things, both confirmed 2026-09-11):**
+
+1. **The Kraken API key cannot place orders.** `AddOrder` returns
+   `EGeneral:Permission denied` while `Balance` and `OpenOrders` succeed — so
+   the key and request signing are fine, it is simply missing the **Create &
+   Modify Orders** permission. Fix at kraken.com → Settings → API → edit the
+   key. Found by validate mode; dry-run cannot detect this, and live trading
+   would have failed on the first signal.
+2. **The account is unfunded** — $0.01 USD against a $100 trade size.
+
+Kraken's minimum for ETH/USD is 0.001 ETH (~$2.50), so the first live run can
+be $10–20 rather than $100. Lower `USD_PER_TRADE` for one full cycle, then
+raise it.
 
 ## How a tick works
 
@@ -112,6 +123,48 @@ derivation the official SDK uses. A missing object returns 404, which the code
 treats as "no state yet". Without the bearer token the request returns 403,
 which is the point of a private store.
 
+## Testing
+
+Three layers, because each catches what the others cannot.
+
+**1. Deterministic rules** — `python3 -m unittest test_strategy`
+
+No network, no keys, runs in a second. Covers when to buy, when to sell, and
+how much: crossover edges (the signal must fire once, not every day of a
+trend), stop-loss and take-profit thresholds and their precedence, `0` meaning
+"disabled" rather than "sell at breakeven", and rounding that never overspends
+the stake. Run it after touching anything in `kraken_bot.py`.
+
+**2. End-to-end sell rehearsal** — `python3 rehearse_sell.py`
+
+Waiting for a real cross down can take weeks, so this seeds a position in an
+isolated Blob namespace (`development/rehearsal.db`), forces a take-profit, and
+runs the real `run_tick()`. Proves the whole sell path — realized P&L, cleared
+state, and the push of that cleared state to Blob. It refuses to run against
+`production/` and stays silent on Telegram unless given `--notify`.
+
+**3. Kraken order validation** — `python3 rehearse_sell.py --validate`
+
+Sends the order to Kraken with `validate=true`: real authentication, real
+signing, real pair and volume checks, nothing placed. This is the **only** test
+that exercises the credentials, and it immediately caught a key missing the
+order permission. Set `VALIDATE=true` in Vercel to run the deployed bot the
+same way. Caveat: Kraken's validate does not check balance, so "insufficient
+funds" still only surfaces when live.
+
+### Modes
+
+`api/tick.py` has three, in increasing order of consequence:
+
+| Mode | Env | Kraken order call |
+|---|---|---|
+| dry-run | neither set (default) | none |
+| validate | `VALIDATE=true` | `AddOrder` with `validate=true`, nothing placed |
+| live | `LIVE=true` | real market order |
+
+`LIVE` wins if both are set. Everything else — signals, state, notifications —
+runs identically in all three, so dry-run genuinely exercises the logic.
+
 ## Deploying
 
 Pushing to `main` triggers a Vercel build automatically. This was broken around
@@ -193,6 +246,11 @@ The same logic argues against a tight stop-loss — the worst trade was only
 −5.0%. `STOP_LOSS_PCT` is 0 and untested as of this date.
 
 ## Gotchas
+
+- **A Kraken key that reads fine may still not trade.** `Balance` succeeding
+  proves only the key and signing, not the order permission — those are
+  separate grants. Check with `rehearse_sell.py --validate` rather than
+  assuming, and re-check after rotating a key.
 
 - **`vercel env pull` and `vercel blob create-store` rewrite `.env.local`** and
   mangle single-quoted values: `KEY='v'` becomes `KEY="'v'"`, so the value
