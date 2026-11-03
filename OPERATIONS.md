@@ -325,9 +325,14 @@ re-enters, exactly as before. It only matters when the bot is flat during an
 uptrend: first start, a restart with cleared state, or (if ever enabled) after
 a stop-loss/take-profit exit. The cost is that such an entry can come late in
 a trend that is about to roll over; the worst case is one losing trade sized
-like any other, ended by the next cross down. Not backtested against real
-data at the time (Kraken was unreachable from the session that made the
-change) — `backtest.py` gained `--no-enter-on-trend` to compare the two.
+like any other, ended by the next cross down. `backtest.py` gained
+`--no-enter-on-trend` to compare the two.
+
+Backtested 2026-11-03 with `compare_strategies.py` (ETH/USD daily,
+2025-01-13 → 2026-11-02, full balance compounded, 0.26%/side): identical over
+the full period (+108.6%, 13 buys, max DD −17.6%), and +29.8% vs +28.7% on
+average across 38 simulated go-live dates, same worst case (−6.0%). A small
+gain, no added risk — it only removes the idle-start problem.
 
 **Supabase removed (2026-08-20).** State used to live in a Supabase `bot_state`
 table over PostgREST. Removed at the user's request — code, Vercel env vars,
@@ -389,6 +394,16 @@ The same logic argues against a tight stop-loss — the worst trade was only
 
 ## Ideas not pursued
 
+- **30/20/60-day momentum, 4h candles, and trading BTC or SOL (2026-11-03).**
+  Tested with `compare_strategies.py` (results in `backtest_results.md`, run by
+  the `backtests` GitHub Actions workflow because Kraken is unreachable from
+  cloud sessions). ETH daily: mom-30 +99.7% but max DD −44.7%, against SMA
+  20/30's +108.6% at −17.6% — similar return for 2.5× the drawdown; mom-20
+  +22.2%, mom-60 +68.4%. 4h candles over the ~100 days Kraken serves: SMA 20/30
+  −0.8% on ETH and −4.5% on BTC, worse than buy-and-hold (+18.8% / +18.5%) —
+  more trades mostly bought fees. BTC and SOL daily lost or roughly broke even
+  under every rule (SMA 20/30 −15.7% / −2.7%), so adding pairs adds trades
+  without adding edge. Kept: SMA 20/30, daily, ETH only.
 - Deriving the position from the Kraken balance instead of storing it, making
   the exchange the single source of truth. Attractive because stored state can
   drift from reality — a crash between placing an order and saving leaves them
