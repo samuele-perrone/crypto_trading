@@ -5,7 +5,7 @@ Working notes for running this bot and picking the work back up later.
 deployed, how it behaves in production, why things are the way they are, and
 the traps that already cost time once.
 
-Last updated: 2026-09-11.
+Last updated: 2026-11-03.
 
 ## Current status
 
@@ -24,11 +24,11 @@ Last updated: 2026-09-11.
 - **State:** private Vercel Blob store `crypto-trading-state`, object
   `production/bot_state.db`.
 - **Kraken account:** $65.81 USD, no ETH. API key verified end to end.
-- **Open simulated position** since 2026-08-21 00:15 UTC: entry $2,332.51,
-  volume 0.04287227 (~$100 at the old trade size), around +5.6% in mid
-  September. This was the first signal the deployed bot produced, and it
-  confirms Blob persistence works in real operation — written by a cron tick,
-  intact across weeks of cold invocations.
+- **Entry rule: `ENTER_ON_TREND` on (default) since 2026-11-03.** A flat bot
+  buys at the next tick whenever SMA20 is above SMA30, not only on the day of
+  a cross up. Before this, the bot had sat flat for ~8 weeks of live running
+  because it went live mid-uptrend and was waiting for the trend to end and a
+  new one to start. Set `ENTER_ON_TREND=false` to restore cross-only entry.
 
 ### Going live — what to watch
 
@@ -115,8 +115,9 @@ state.
 3. Compute the SMA crossover signal on **closed candles only** — the still
    forming candle is dropped, so signals never flicker intraday.
 4. Load the open position from state.
-5. Sell if stop-loss, take-profit, or an SMA cross down fires; buy on a cross
-   up when flat. In dry-run everything runs except the Kraken order call.
+5. Sell if stop-loss, take-profit, or an SMA cross down fires. When flat, buy
+   on a cross up, or (with `ENTER_ON_TREND`, the default) whenever the fast
+   SMA is already above the slow one — see `buy_reason()`. In dry-run everything runs except the Kraken order call.
 6. Persist the new position, notify Telegram, return the tick as JSON (also
    printed to the Vercel function log).
 
@@ -311,6 +312,22 @@ Env var changes only take effect on a new deployment. Watch the next tick, and
 keep in mind a signal may not appear for weeks — 13 trades in 2 years.
 
 ## Decisions
+
+**Enter on trend state, not only on the cross (2026-11-03).** Live since
+2026-09-11 with zero trades: the bot went live flat while SMA20 was already
+above SMA30, and a cross-only rule then waits for a cross down *and* a fresh
+cross up before entering — on a system that crosses ~7 times a year, that can
+be months. `buy_reason()` now also buys when flat and fast > slow.
+
+What it changes and what it does not: in normal operation nothing — after a
+cross-down sell the fast SMA is below the slow one, so only a fresh cross up
+re-enters, exactly as before. It only matters when the bot is flat during an
+uptrend: first start, a restart with cleared state, or (if ever enabled) after
+a stop-loss/take-profit exit. The cost is that such an entry can come late in
+a trend that is about to roll over; the worst case is one losing trade sized
+like any other, ended by the next cross down. Not backtested against real
+data at the time (Kraken was unreachable from the session that made the
+change) — `backtest.py` gained `--no-enter-on-trend` to compare the two.
 
 **Supabase removed (2026-08-20).** State used to live in a Supabase `bot_state`
 table over PostgREST. Removed at the user's request — code, Vercel env vars,

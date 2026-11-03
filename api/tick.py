@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from kraken_bot import (KrakenClient, sma, crossover_signal,  # noqa: E402
+from kraken_bot import (KrakenClient, sma, crossover_signal, buy_reason,  # noqa: E402
                         sell_reason, buy_volume, trade_stake)
 from state_store import (load_position, save_position,  # noqa: E402
                          state_location, is_ephemeral)
@@ -68,6 +68,9 @@ def run_tick():
     trade_pct = float(os.environ.get("TRADE_PCT") or 0)
     stop_loss = float(os.environ.get("STOP_LOSS_PCT") or 0)
     take_profit = float(os.environ.get("TAKE_PROFIT_PCT") or 0)
+    # ENTER_ON_TREND (default on): when flat, buy if SMA fast is already above
+    # SMA slow instead of waiting for a fresh cross up. See buy_reason().
+    enter_on_trend = (os.environ.get("ENTER_ON_TREND") or "true").lower() != "false"
     live = os.environ.get("LIVE", "").lower() == "true"
     # VALIDATE sends the order to Kraken with validate=true: real auth, real
     # signing, real pair/volume checks, but nothing is ever placed. It is the
@@ -86,6 +89,7 @@ def run_tick():
         "usd_per_trade": usd,      # fallback when the balance cannot be read
         "trade_pct": trade_pct,
         "sma": f"{fast}/{slow}",
+        "enter_on_trend": enter_on_trend,
         "action": "none",
     }
 
@@ -132,7 +136,8 @@ def run_tick():
                    f"({reason})\nPnL: {change_pct:+.2f}% "
                    f"[{out['mode']}]")
     else:
-        if signal == "buy":
+        entry_reason = buy_reason(signal, closes, fast, slow, enter_on_trend)
+        if entry_reason:
             # Size against the real balance when we can see it. A stake equal
             # to the balance always fails -- the taker fee pushes the cost
             # above it -- so this caps rather than letting the order bounce.
@@ -155,10 +160,10 @@ def run_tick():
                                  f"{pair['ordermin']} — raise USD_PER_TRADE or "
                                  f"fund the account")
             else:
-                execute("buy", volume, "SMA cross up")
+                execute("buy", volume, entry_reason)
                 save_position(state_key, {"volume": volume, "entry": price})
                 notify(f"🟢 BOUGHT {volume} {pair_arg} @ ${price:,.2f} "
-                       f"(~${stake:.2f}) [{out['mode']}]")
+                       f"(~${stake:.2f}, {entry_reason}) [{out['mode']}]")
 
     # Daily proof-of-life when nothing traded (disable with DAILY_REPORT=false)
     if out["action"] == "none" and os.environ.get("DAILY_REPORT", "true").lower() != "false":
@@ -166,7 +171,8 @@ def run_tick():
             status = (f"holding {position['volume']} @ ${position['entry']:,.2f} "
                       f"({out.get('unrealized_pct', 0):+.2f}%)")
         else:
-            status = "no position, waiting for SMA cross up"
+            status = ("no position, waiting for SMA trend up" if enter_on_trend
+                      else "no position, waiting for SMA cross up")
         notify(f"📊 {pair_arg} ${price:,.2f} | SMA{fast} {out['sma_fast']:,.2f} vs "
                f"SMA{slow} {out['sma_slow']:,.2f} | {status} [{out['mode']}]")
 

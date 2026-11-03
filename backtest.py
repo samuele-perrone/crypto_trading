@@ -13,7 +13,7 @@ Usage:
 import argparse
 from datetime import datetime, timezone
 
-from kraken_bot import KrakenClient, sma, TAKER_FEE  # noqa: F401 (re-exported)
+from kraken_bot import KrakenClient, sma, buy_reason, TAKER_FEE  # noqa: F401 (re-exported)
 
 
 def fetch_candles(client, pair_name, interval):
@@ -24,7 +24,8 @@ def fetch_candles(client, pair_name, interval):
             for r in rows[:-1]]
 
 
-def backtest(candles, fast, slow, stop_loss, take_profit, usd_per_trade):
+def backtest(candles, fast, slow, stop_loss, take_profit, usd_per_trade,
+             enter_on_trend=True):
     closes = [c[4] for c in candles]
     trades = []
     position = None  # (entry_price, volume)
@@ -54,7 +55,8 @@ def backtest(candles, fast, slow, stop_loss, take_profit, usd_per_trade):
                                "time": t})
                 position = None
         else:
-            if fast_prev <= slow_prev and fast_now > slow_now:
+            signal = "buy" if (fast_prev <= slow_prev and fast_now > slow_now) else None
+            if buy_reason(signal, window, fast, slow, enter_on_trend):
                 position = (close, usd_per_trade / close)
 
     # Mark-to-market any open position at the end
@@ -75,6 +77,8 @@ def main():
     p.add_argument("--stop-loss", type=float, default=0.0)
     p.add_argument("--take-profit", type=float, default=0.0)
     p.add_argument("--usd", type=float, default=100.0)
+    p.add_argument("--no-enter-on-trend", dest="enter_on_trend", action="store_false",
+                   help="Only enter on a fresh cross up, as the bot did before 2026-11-03")
     args = p.parse_args()
 
     client = KrakenClient()
@@ -85,7 +89,8 @@ def main():
     days = (candles[-1][0] - candles[0][0]) / 86400
 
     trades, open_pnl = backtest(candles, args.fast, args.slow,
-                                args.stop_loss, args.take_profit, args.usd)
+                                args.stop_loss, args.take_profit, args.usd,
+                                args.enter_on_trend)
 
     wins = [t for t in trades if t["pnl"] > 0]
     total_pnl = sum(t["pnl"] for t in trades) + open_pnl

@@ -107,9 +107,12 @@ recorded in `OPERATIONS.md`.
   a real `AddOrder` with `validate=true`, nothing placed. It is the only way to
   test credentials, and dry-run provably cannot: a key that reads balances fine
   may still lack order permission.
-- **Sell rules live in `sell_reason()`** in `kraken_bot.py`, shared by the
-  local loop and the deployed tick. Change them there, not inline in either
-  caller, or the two paths drift.
+- **Sell rules live in `sell_reason()`, buy rules in `buy_reason()`**, both in
+  `kraken_bot.py` and shared by the local loop, the deployed tick and
+  `backtest.py`. Change them there, not inline in any caller, or the paths
+  drift. `buy_reason()` buys into an existing uptrend when flat
+  (`ENTER_ON_TREND`, default on) — `crossover_signal()` alone is an edge, not
+  a state, and would leave a flat bot idle mid-trend.
 - **Position sizing goes through `trade_stake()`**, never `usd / price`
   directly. A stake equal to the balance always fails — the taker fee pushes
   the cost above it — so every stake is capped by `affordable_usd()`.

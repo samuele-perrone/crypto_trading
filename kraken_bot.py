@@ -199,6 +199,25 @@ def crossover_signal(closes, fast_n, slow_n):
     return None
 
 
+def buy_reason(signal, closes, fast_n, slow_n, enter_on_trend=True):
+    """Why a flat bot should buy now, or None to keep waiting.
+
+    A cross up is the classic entry. With `enter_on_trend` the bot also buys
+    when it is flat while the fast SMA already sits above the slow one - the
+    state a cross up would have produced. Without it, a bot that starts (or
+    restarts) mid-uptrend sits idle until the trend ends and a new one begins,
+    which can take months. Re-entry after a cross-down sell is unaffected:
+    the fast SMA is below the slow one then, so only a fresh cross buys.
+    """
+    if signal == "buy":
+        return "SMA cross up"
+    if enter_on_trend and len(closes) >= slow_n:
+        fast_now, slow_now = sma(closes, fast_n), sma(closes, slow_n)
+        if fast_now > slow_now:
+            return "SMA trend up"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # State (persists position across restarts)
 # ---------------------------------------------------------------------------
@@ -288,13 +307,15 @@ def run(args):
                     log(f"Holding | price ${price:.2f} | entry "
                         f"${position['entry']:.2f} | {change_pct:+.2f}%")
             else:
-                if signal == "buy":
+                entry_reason = buy_reason(signal, closes, args.fast, args.slow,
+                                   args.enter_on_trend)
+                if entry_reason:
                     volume = buy_volume(args.usd, price, pair["lot_decimals"])
                     if volume < pair["ordermin"]:
                         log(f"Buy signal, but ${args.usd:.2f} buys {volume} "
                             f"< Kraken minimum {pair['ordermin']}. Increase --usd.")
                     else:
-                        place("buy", volume, price, "SMA cross up")
+                        place("buy", volume, price, entry_reason)
                 else:
                     fast_v, slow_v = sma(closes, args.fast), sma(closes, args.slow)
                     log(f"No position | price ${price:.2f} | "
@@ -326,6 +347,9 @@ def main():
                    help="Take-profit %% above entry, 0 to disable (default: 0/off)")
     p.add_argument("--poll", type=int, default=300,
                    help="Seconds between checks (default: 300)")
+    p.add_argument("--no-enter-on-trend", dest="enter_on_trend", action="store_false",
+                   help="When flat, wait for a fresh cross up instead of buying "
+                        "into an existing uptrend (default: buy into it)")
     p.add_argument("--live", action="store_true",
                    help="Place REAL orders. Without this flag, trades are simulated.")
     args = p.parse_args()

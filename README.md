@@ -5,7 +5,10 @@ Kraken, using an SMA-crossover strategy with stop-loss and take-profit.
 
 ## Strategy
 
-- **Buy** when the fast SMA crosses **above** the slow SMA (uptrend starting)
+- **Buy** when the fast SMA crosses **above** the slow SMA (uptrend starting),
+  or — when holding nothing — whenever the fast SMA is already above the slow
+  one, so a bot started mid-uptrend does not sit idle for months
+  (`--no-enter-on-trend` / `ENTER_ON_TREND=false` to wait for a fresh cross)
 - **Sell** when the fast SMA crosses **below** the slow SMA (uptrend ending)
 - Optional **stop-loss** / **take-profit** (off by default — backtesting showed
   tight stops on daily candles get shaken out by normal crypto volatility)
@@ -61,6 +64,7 @@ python3 kraken_bot.py --pair BTC/USD --usd 50 --live
 | `--stop-loss` | 0 (off) | Sell if down this % from entry (0 disables) |
 | `--take-profit` | 0 (off) | Sell if up this % from entry (0 disables) |
 | `--poll` | 300 | Seconds between market checks |
+| `--no-enter-on-trend` | off | When flat, wait for a fresh cross up instead of buying into an existing uptrend |
 | `--live` | off | Place real orders |
 
 ## Backtest results (deployed config)
@@ -144,6 +148,7 @@ lives when no function is running.
    | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | from step 2 |
    | `CRON_SECRET` | any random string (protects the endpoint) |
    | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | only when going live |
+   | `ENTER_ON_TREND` | optional; default `true` — when flat, buy if fast SMA > slow SMA; `false` = only on a fresh cross up |
    | `LIVE` | unset = dry-run; `true` = real orders |
    | `VALIDATE` | `true` = send orders to Kraken with `validate=true` (nothing placed) |
 

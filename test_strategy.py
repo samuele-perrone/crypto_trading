@@ -12,7 +12,7 @@ every build in a second.
 
 import unittest
 
-from kraken_bot import (sma, crossover_signal, sell_reason, buy_volume,
+from kraken_bot import (sma, crossover_signal, buy_reason, sell_reason, buy_volume,
                         affordable_usd, trade_stake, TAKER_FEE)
 
 
@@ -63,6 +63,33 @@ class TestCrossoverSignal(unittest.TestCase):
             closes = self.UP + ramp(self.UP[-1] + 10, 10, extra)
             self.assertIsNone(crossover_signal(closes, 3, 10),
                               f"re-fired {extra} candles after the cross")
+
+
+class TestBuyReason(unittest.TestCase):
+    UPTREND = ramp(100, 1, 60)     # fast SMA above slow, no cross in sight
+    DOWNTREND = ramp(160, -1, 60)  # fast SMA below slow
+
+    def test_cross_up_always_buys(self):
+        self.assertEqual(buy_reason("buy", TestCrossoverSignal.UP, 3, 10),
+                         "SMA cross up")
+        self.assertEqual(buy_reason("buy", TestCrossoverSignal.UP, 3, 10,
+                                    enter_on_trend=False), "SMA cross up")
+
+    def test_flat_in_uptrend_buys_by_default(self):
+        """The fix: a bot that starts mid-uptrend must not sit idle."""
+        self.assertEqual(buy_reason(None, self.UPTREND, 3, 10), "SMA trend up")
+
+    def test_flat_in_uptrend_waits_when_disabled(self):
+        self.assertIsNone(buy_reason(None, self.UPTREND, 3, 10,
+                                     enter_on_trend=False))
+
+    def test_downtrend_never_buys(self):
+        """After a cross-down sell the fast SMA is below: no instant re-buy."""
+        self.assertIsNone(buy_reason(None, self.DOWNTREND, 3, 10))
+        self.assertIsNone(buy_reason("sell", TestCrossoverSignal.DOWN, 3, 10))
+
+    def test_not_enough_history(self):
+        self.assertIsNone(buy_reason(None, [1, 2, 3], 3, 10))
 
 
 class TestSellReason(unittest.TestCase):
