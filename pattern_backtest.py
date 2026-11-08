@@ -520,14 +520,20 @@ class HeikinAshi(Rule):
 
 
 class Supertrend(Rule):
-    def __init__(self, label, candles):
+    def __init__(self, label, candles, period=10, mult=3.0):
         super().__init__(label, candles)
-        self.up = supertrend_up(candles)
+        self.up = supertrend_up(candles, period, mult)
 
     def decide(self, i, holding):
         if self.up[i] is None:
             return None
         return "buy" if (self.up[i] and not holding) else "sell" if (holding and not self.up[i]) else None
+
+
+class AboveEma(AboveEma50):
+    def __init__(self, label, candles, n):
+        Rule.__init__(self, label, candles)
+        self.e = ema([c[4] for c in candles], n)
 
 
 class SmaBot(Rule):
@@ -697,7 +703,22 @@ def rule_specs():
         ("st_1d", "Supertrend 10/3, daily", DAY, lambda cs: Supertrend("", cs)),
         ("sma_1d", "Deployed bot: SMA 20/30 daily (ENTER_ON_TREND)", DAY,
          lambda cs: SmaBot("", cs)),
+        # Neighbours of the best daily results: a real effect should not
+        # vanish when the parameters move a little.
+        ("st_1d_7_3", "Supertrend 7/3, daily", DAY, lambda cs: Supertrend("", cs, 7, 3.0)),
+        ("st_1d_14_3", "Supertrend 14/3, daily", DAY, lambda cs: Supertrend("", cs, 14, 3.0)),
+        ("st_1d_10_2", "Supertrend 10/2, daily", DAY, lambda cs: Supertrend("", cs, 10, 2.0)),
+        ("st_1d_10_4", "Supertrend 10/4, daily", DAY, lambda cs: Supertrend("", cs, 10, 4.0)),
+        ("ema30_1d", "Price above EMA30, daily", DAY, lambda cs: AboveEma("", cs, 30)),
+        ("ema100_1d", "Price above EMA100, daily", DAY, lambda cs: AboveEma("", cs, 100)),
     ]
+
+
+def ceil_day(ts):
+    return ts - ts % DAY + (DAY if ts % DAY else 0)
+
+
+SENSITIVITY_KEYS = ("php_live", "sma_1d", "ema_1d", "st_1d")
 
 
 def evaluate_coin(hourly, fee, start, end, specs=None, extra_fees=()):
@@ -706,9 +727,9 @@ def evaluate_coin(hourly, fee, start, end, specs=None, extra_fees=()):
     Quarter marks are calendar dates from the shared `start`, so quarters line
     up across coins; `_active[q]` is False for a quarter that began before
     this coin's own window (a late listing), which the averages skip."""
-    start = start - start % DAY                     # align to a daily close
+    start = ceil_day(start)                         # align to a daily close
     coin_start = max(start, hourly[0][0] + WARMUP_DAYS * DAY)
-    coin_start = coin_start - coin_start % DAY + (DAY if coin_start % DAY else 0)
+    coin_start = ceil_day(coin_start)
     marks = [start + q * QUARTER for q in range(1, 9)]
     candles = {H4: aggregate(hourly, H4), DAY: aggregate(hourly, DAY)}
     slip = stop_slip([r for r in hourly if r[0] >= coin_start])
@@ -717,7 +738,7 @@ def evaluate_coin(hourly, fee, start, end, specs=None, extra_fees=()):
     start = coin_start
     for key, _label, period, make in (specs or rule_specs()):
         rule = make(candles[period])
-        fees = [fee, 0.0] + [f for f in extra_fees if key in ("php_live", "sma_1d")]
+        fees = [fee, 0.0] + [f for f in extra_fees if key in SENSITIVITY_KEYS]
         out[key] = {f: simulate(hourly, period, rule, f, start, end, marks, slip) for f in fees}
     out["bh"] = {f: buy_and_hold(hourly, f, start, end, marks) for f in (fee, 0.0)}
     return out
@@ -822,6 +843,19 @@ def report(results, sources, fee, start_ts, end_ts, missing, extra_fees):
     w(row("Buy and hold (benchmark)", "bh"))
     w("")
 
+    w("## Are the best daily results robust?")
+    w("")
+    w("17 rules were tested, so the best one is partly luck. Neighbouring "
+      "parameters show whether it is an effect or a fluke.")
+    w("")
+    w(head)
+    w(sep)
+    for k in ("st_1d", "st_1d_7_3", "st_1d_14_3", "st_1d_10_2", "st_1d_10_4",
+              "ema_1d", "ema30_1d", "ema100_1d", "sma_1d"):
+        w(row(specs[k], k))
+    w(row("Buy and hold (benchmark)", "bh"))
+    w("")
+
     w("## By quarter: average coin return")
     w("")
     marks = next(iter(results.values()))["_marks"]
@@ -831,6 +865,7 @@ def report(results, sources, fee, start_ts, end_ts, missing, extra_fees):
     for label, key in (("PHP rule, as deployed", "php_live"),
                        ("PHP rule, closed 4h", "php_closed"),
                        ("Price above EMA50, daily", "ema_1d"),
+                       ("Supertrend 10/3, daily", "st_1d"),
                        ("SMA 20/30 daily", "sma_1d"),
                        ("Buy and hold", "bh")):
         s = summarize(results, key, fee)
@@ -843,27 +878,28 @@ def report(results, sources, fee, start_ts, end_ts, missing, extra_fees):
     if extra_fees:
         w("## Fee sensitivity")
         w("")
-        w("| Rule | " + " | ".join(f"{f * 100:.2f}%/side" for f in (0.0, *extra_fees, fee)) + " |")
-        w("|" + "---|" * (len(extra_fees) + 3))
-        for key in ("php_live", "sma_1d"):
-            cells = []
-            for f in (0.0, *extra_fees, fee):
-                cells.append(pct(summarize(results, key, f)["mean"]))
+        levels = sorted({0.0, fee, *extra_fees})
+        w("| Rule | " + " | ".join(f"{f * 100:.2f}%/side" for f in levels) + " |")
+        w("|" + "---|" * (len(levels) + 1))
+        for key in SENSITIVITY_KEYS:
+            cells = [pct(summarize(results, key, f)["mean"]) for f in levels]
             w(f"| {specs[key]} | " + " | ".join(cells) + " |")
         w("")
-        w(f"The deployed SMA bot uses market orders, so it pays the taker fee "
-          f"({FEE_TAKER_NOW * 100:.2f}% at the entry tier).")
+        w(f"0.25% = the maker fee the PHP bot paid in 2025; 0.40% / 0.80% = maker / "
+          f"taker at Kraken's entry tier since July 2026. The deployed SMA bot uses "
+          f"market orders, so it pays {FEE_TAKER_NOW * 100:.2f}%.")
         w("")
 
     w("## Per coin: the PHP live rule")
     w("")
     w("| Coin | Window from | As deployed | Closed 4h | Closed 4h, no stop | "
-      "Trades (deployed) | Buy & hold |")
-    w("|---|---|---|---|---|---|---|")
+      "Trades (deployed) | Supertrend 10/3 daily | SMA 20/30 daily | Buy & hold |")
+    w("|---|---|---|---|---|---|---|---|---|")
     for coin, r in results.items():
         a, c, n = r["php_live"][fee], r["php_closed"][fee], r["php_closed_nostop"][fee]
         w(f"| {coin} | {utc(r['_start'])} | {pct(a['ret'])} | {pct(c['ret'])} | "
-          f"{pct(n['ret'])} | {len(a['trades'])} | {pct(r['bh'][fee]['ret'])} |")
+          f"{pct(n['ret'])} | {len(a['trades'])} | {pct(r['st_1d'][fee]['ret'])} | "
+          f"{pct(r['sma_1d'][fee]['ret'])} | {pct(r['bh'][fee]['ret'])} |")
     w("")
     w("Assumptions that flatter the strategies: every signal order fills at the "
       "decision price (no spread, no unfilled limit orders). Stops fill below the "

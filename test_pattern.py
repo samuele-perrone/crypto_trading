@@ -228,6 +228,18 @@ class TestStopsDoNotCreateEdge(unittest.TestCase):
         self.assertLess(slipped, exact / 2)
 
 
+class TestWindow(unittest.TestCase):
+    def test_full_history_coin_is_active_from_the_first_quarter(self):
+        """Regression: the shared start was rounded down to midnight while a
+        coin's own start (first candle + warm-up, rounded up) landed a day
+        later, so no coin counted in the first quarter or Year 1."""
+        hs = path_walk(24 * 200, seed=3, t0=T0 + 21 * HOUR)       # starts 21:00
+        start = hs[0][0] + pb.WARMUP_DAYS * DAY
+        r = pb.evaluate_coin(hs, 0.004, start, hs[-1][0], specs=pb.rule_specs()[:1])
+        self.assertEqual(r["_start"], pb.ceil_day(start))
+        self.assertTrue(r["_active"][0])
+
+
 class TestEndToEnd(unittest.TestCase):
     def test_every_rule_runs_and_the_report_renders(self):
         hs = path_walk(24 * 200, seed=7)
