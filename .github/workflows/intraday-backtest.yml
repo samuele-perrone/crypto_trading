@@ -1,0 +1,32 @@
+name: intraday-backtest
+# Runs intraday_backtest.py on GitHub's runner (cloud sessions cannot reach
+# Coinbase or Kraken) and commits the report back to this branch as
+# intraday_results.md.
+on:
+  push:
+    branches: [intraday-backtest]
+    paths-ignore: [intraday_results.md]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install requests
+      - name: Day-trading backtest
+        run: |
+          {
+            echo "# Day-trading backtest ($(date -u +%Y-%m-%dT%H:%MZ))"
+            python3 intraday_backtest.py
+          } > intraday_results.md 2>&1 || true
+          cat intraday_results.md
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add intraday_results.md
+          git commit -m "Intraday backtest results" && git push || true
