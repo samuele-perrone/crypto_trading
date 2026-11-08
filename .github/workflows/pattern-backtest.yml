@@ -1,0 +1,36 @@
+name: pattern-backtest
+# Runs pattern_backtest.py (the old PHP bot's rules and the other patterns from
+# samuele-perrone/crypto-signals, 22 coins, two years) on GitHub's runner -
+# cloud sessions cannot reach the exchanges - and commits the report back to
+# this branch as pattern_results.md.
+on:
+  push:
+    branches: [pattern-backtest]
+    paths-ignore: [pattern_results.md]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install requests
+      - name: Tests
+        run: python3 -m unittest test_pattern
+      - name: Pattern backtest
+        run: |
+          {
+            echo "# Pattern backtest ($(date -u +%Y-%m-%dT%H:%MZ))"
+            python3 pattern_backtest.py
+          } > pattern_results.md 2>&1 || true
+          cat pattern_results.md
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pattern_results.md
+          git commit -m "Pattern backtest results" && git push || true
