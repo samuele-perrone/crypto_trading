@@ -40,8 +40,8 @@ dependencies.
 # Strategy rules: deterministic, no network, run after touching kraken_bot.py
 python3 -m unittest test_strategy
 python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
-# Everything (rules, state store, look-ahead + /api/status routing)
-python3 -m unittest test_strategy test_state_store test_status
+# Everything (rules, state store, look-ahead + /api/status routing, day-trade backtest)
+python3 -m unittest test_strategy test_state_store test_status test_intraday
 
 # Rehearse a full sell without waiting for the market (isolated Blob namespace)
 python3 rehearse_sell.py
@@ -52,6 +52,9 @@ python3 kraken_bot.py --pair ETH/USD --usd 100
 
 # Backtest a config on real Kraken daily candles
 python3 backtest.py --pair ETH/USD --fast 20 --slow 30
+# Day-trading rule vs the bot across coins (needs network: runs on GitHub
+# Actions via the intraday-backtest branch, results in intraday_results.md)
+python3 intraday_backtest.py --coins BTC ETH SOL
 
 # Run one production-shaped tick locally
 python3 -c "import sys; sys.path.insert(0,'api'); from tick import run_tick; print(run_tick())"

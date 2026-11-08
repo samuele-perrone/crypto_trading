@@ -488,6 +488,22 @@ The same logic argues against a tight stop-loss — the worst trade was only
 
 ## Ideas not pursued
 
+- **Day trading: buy in the morning, sell at the first profit or at the end
+  of the day (2026-11-08).** Tested with `intraday_backtest.py` (results in
+  `intraday_results.md`, run by the `intraday-backtest` workflow on its own
+  branch): buy 08:00 UTC, sell at the first +0.5/1/2/3% or at 20:00 UTC, ten
+  coins, 2024-11-08 → 2026-11-07, two years of Coinbase hourly candles since
+  Kraken serves only 30 days of hourly data. Every variant on every coin lost
+  89–99% after fees. Fees alone explain it: 729 round trips at 0.26%/side
+  compound to −97.8% before any price move. Before fees the rule still had no
+  edge: 08:00 → 20:00 holding lost on 9 of 10 coins (XRP the exception), and a
+  +0.5% take-profit can never win after fees (0% win rate). The take-profit
+  variants won 50–70% of days and still lost, because a capped win of ~0.5–1.9%
+  pays for a full-day loss of ~1.5–2.9%. Same days, bot's SMA 20/30: +133% on
+  ETH, positive on 5 of 10 coins, beat buy-and-hold on 8 of 10; over the last 12
+  months it lost on all 10 (−3.5% ETH to −45.7% XRP) but less than buy-and-hold
+  on every one. Adding coins to the bot remains rejected for the reasons in
+  "Scaling the trade size".
 - **30/20/60-day momentum, 4h candles, and trading BTC or SOL (2026-11-03).**
   Tested with `compare_strategies.py` (results in `backtest_results.md`, run by
   the `backtests` GitHub Actions workflow because Kraken is unreachable from
