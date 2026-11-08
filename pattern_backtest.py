@@ -172,7 +172,9 @@ def fetch_binance_dump(coin, start, end, session):
     while d <= last:
         ym = d.strftime("%Y-%m")
         got = grab(f"{base}/monthly/klines/{sym}/1h/{sym}-1h-{ym}.zip")
-        if got is None and (last - d).days < 62:
+        if got is not None:
+            out.update(got)
+        elif (last - d).days < 62:
             # Monthly files appear after the month ends: use daily files for the
             # current month and a just-finished one. An older month with no
             # file predates the listing.
@@ -182,8 +184,6 @@ def fetch_binance_dump(coin, start, end, session):
                 if g:
                     out.update(g)
                 day = datetime.fromtimestamp(day.timestamp() + DAY, timezone.utc)
-        else:
-            out.update(got)
         d = (d.replace(day=28) + timedelta(days=4)).replace(day=1)
     out = {t: v for t, v in out.items() if start <= t <= end}
     return out or None
@@ -891,7 +891,11 @@ def main():
     results, sources, missing = {}, {}, []
     for coin in args.coins:
         t0 = time.time()
-        src, hourly = fetch_hourly(coin, start - WARMUP_DAYS * DAY, end, session)
+        try:
+            src, hourly = fetch_hourly(coin, start - WARMUP_DAYS * DAY, end, session)
+        except Exception as e:                       # one coin must not sink the run
+            print(f"<!-- {coin}: fetch failed: {e!r} -->", flush=True)
+            src, hourly = None, []
         if not hourly:
             missing.append(coin)
             print(f"<!-- {coin}: no source -->", flush=True)
