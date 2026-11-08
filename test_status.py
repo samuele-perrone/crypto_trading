@@ -148,6 +148,12 @@ class TestReportText(unittest.TestCase):
         self.assertIsNone(tick.heads_up_text({**self.NT, "near": False}))
         self.assertIsNone(tick.heads_up_text(None))
 
+    def test_far_trigger_is_flagged(self):
+        """Real case 2026-11-08: buy trigger $4,875.70 with ETH at $2,223."""
+        far = {**self.NT, "trigger": 4875.7, "distance_pct": 119.3, "near": False}
+        self.assertTrue(tick.next_trade_line(far).endswith("not a one-day move yet"))
+        self.assertNotIn("one-day", tick.next_trade_line(self.NT))
+
     def test_sell_wording(self):
         nt = {**self.NT, "side": "sell", "distance_pct": -1.2}
         self.assertIn("below $2,310.50", tick.heads_up_text(nt))

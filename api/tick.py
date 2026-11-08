@@ -59,11 +59,17 @@ def notify(text):
         pass  # notifications must never break trading
 
 
+FAR_PCT = 20  # past this, the trigger is exact but no realistic one-day move
+
+
 def next_trade_line(nt):
     """One line for the daily report: the close that would trigger the next trade."""
     word = "above" if nt["side"] == "buy" else "below"
-    return (f"Next {nt['side']}: daily close {word} ${nt['trigger']:,.2f} "
+    line = (f"Next {nt['side']}: daily close {word} ${nt['trigger']:,.2f} "
             f"({nt['distance_pct']:+.1f}% from now)")
+    if abs(nt["distance_pct"]) > FAR_PCT:
+        line += " - not a one-day move yet"
+    return line
 
 
 def heads_up_text(nt):

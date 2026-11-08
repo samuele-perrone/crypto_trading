@@ -19,6 +19,9 @@ Last updated: 2026-11-08.
   "Next buy/sell: daily close above/below $X" line, and leads with
   "⏳ BUY/SELL may be coming" when the price is within `HEADS_UP_PCT`
   (default 3%) of that close, or already past it. Unset in Vercel = default.
+  A trigger more than 20% away (`FAR_PCT`) gets "- not a one-day move yet":
+  on 2026-11-08 the buy trigger was $4,875.70 with ETH at $2,223 (+119%),
+  exact but meaningless as a one-day target.
 - **Mode: LIVE since 2026-09-11.** `LIVE=true` in Vercel production — real
   market orders. The simulated position was deleted in the same change, so the
   bot started flat and enters only on a fresh cross up.

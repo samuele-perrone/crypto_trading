@@ -39,9 +39,9 @@ dependencies.
 ```sh
 # Strategy rules: deterministic, no network, run after touching kraken_bot.py
 python3 -m unittest test_strategy
+python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
 # Everything (rules, state store, look-ahead + /api/status routing)
 python3 -m unittest test_strategy test_state_store test_status
-python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
 
 # Rehearse a full sell without waiting for the market (isolated Blob namespace)
 python3 rehearse_sell.py
