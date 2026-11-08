@@ -30,8 +30,9 @@ Last updated: 2026-11-08.
   daily candle closes — the only moment an SMA signal can change.
 - **Config:** ETH/USD, SMA 20/30 on daily candles, no stop-loss, no
   take-profit. **Sizing: `TRADE_PCT=100`** — every buy uses the whole USD
-  balance, less the fee headroom (at $65.81 that is a $65.31 stake costing
-  $65.48). `USD_PER_TRADE=20` remains only as the fallback for when the
+  balance, less the fee headroom (at $65.81 that is a $64.96 stake costing
+  $65.48 at Kraken's 0.80% entry-tier taker fee; `TAKER_FEE` raised from
+  0.26% on 2026-11-08 — see **Decisions**). `USD_PER_TRADE=20` remains only as the fallback for when the
   balance cannot be read. The tick echoes `sizing`, `trade_pct` and
   `usd_per_trade`, since `vercel env ls` cannot show values.
 - **State:** private Vercel Blob store `crypto-trading-state`, object
@@ -97,7 +98,7 @@ Three things make a larger size safe, all in `kraken_bot.py` and covered by
 tests:
 
 - **You cannot spend the whole balance.** A $65.81 stake costs $65.81 plus the
-  0.26% taker fee = $65.98, more than the balance, and the order is rejected.
+  0.80% taker fee = $66.34, more than the balance, and the order is rejected.
   `affordable_usd()` derives the real ceiling, and `trade_stake()` caps every
   stake to it — so an over-sized `USD_PER_TRADE` is clamped rather than
   bouncing. The tick reports `usd_available`, `stake`, and `stake_capped_from`
@@ -375,6 +376,19 @@ keep in mind a signal may not appear for weeks — 13 trades in 2 years.
 
 ## Decisions
 
+**`TAKER_FEE` raised from 0.26% to 0.80% (2026-11-08).** Kraken redesigned
+its Pro fee tiers in July 2026: the entry tier (under $2.5K of 30-day spot
+volume) is now 0.40% maker / 0.80% taker (Kraken's published fee schedule,
+checked 2026-11-08). The bot still assumed 0.26%, so a `TRADE_PCT=100` buy on
+$65.81 was sized at $65.31 and would have cost $65.83 — $0.02 over the
+balance, an "insufficient funds" rejection on the first live buy. Kraken's
+validate mode does not check funds, so no rehearsal would have caught it. The
+constant is set to the worst tier the account can be on; the stake is now
+$64.96. Every backtest reads the same constant, so results recorded before
+this date (`backtest_results.md`, the comparisons below) used 0.26%/side and
+overstate returns: about 1.1 points per round trip, ~14 points over the
+deployed rule's 13 trades in two years. `test_strategy` pins the 0.80% case.
+
 **Lead the look-ahead with the cross and an average path, not the one-day
 trigger (2026-11-08).** The first version reported "the next buy needs a daily
 close above $4,875.70", which reads as a price target the bot waits for. It
@@ -445,6 +459,12 @@ The same logic argues against a tight stop-loss — the worst trade was only
 −5.0%. `STOP_LOSS_PCT` is 0 and untested as of this date.
 
 ## Gotchas
+
+- **Exchange fees change under you.** Kraken's July 2026 fee change tripled
+  the taker fee with no API-visible signal, and the bot's sizing silently
+  became $0.02 too large to fill. Check Kraken's fee schedule (and the
+  account's tier under Settings) whenever sizing or backtests matter, and
+  keep `TAKER_FEE` at the worst tier the account can be on.
 
 - **Every path reaches `tick.handler`, not just `/api/tick`.** With the
   Python framework preset and the pyproject entrypoint, a request for

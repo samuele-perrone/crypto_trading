@@ -179,6 +179,14 @@ class TestStakeSizing(unittest.TestCase):
         for balance in (10, 65.81, 1000):
             self.assertLessEqual(affordable_usd(balance) * (1 + TAKER_FEE), balance)
 
+    def test_full_balance_stake_covers_krakens_current_fee(self):
+        """Regression: at the old 0.26% assumption a TRADE_PCT=100 stake on
+        $65.81 was $65.31, which Kraken's July 2026 0.80% taker fee pushes to
+        $65.83 - over the balance. Pinned to the real fee, not TAKER_FEE, so
+        lowering the constant again cannot quietly pass."""
+        stake = trade_stake(20, 100, 65.81)
+        self.assertLessEqual(stake * 1.008, 65.81)
+
     def test_stake_never_exceeds_balance_for_any_config(self):
         for configured in (5, 20, 64, 100, 10_000):
             for pct in (0, 10, 50, 100):

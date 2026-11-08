@@ -31,7 +31,12 @@ from datetime import datetime, timezone
 import requests
 
 API_URL = "https://api.kraken.com"
-TAKER_FEE = 0.0026  # Kraken taker fee, 0.26% per side
+# Kraken Pro taker fee per side at the entry tier (under $2.5K of 30-day
+# volume). Kraken raised it from 0.26% to 0.80% in July 2026; the old value
+# sized a full-balance buy $0.02 above what the account could pay. Sizing
+# (affordable_usd) and every backtest read this, so keep it at the worst tier
+# the account can be on.
+TAKER_FEE = 0.008
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_state.json")
 
 # Kraken uses XBT for Bitcoin and prefixes some legacy assets with X/Z.
@@ -176,8 +181,8 @@ def buy_volume(usd, price, lot_decimals):
 def affordable_usd(usd_balance, fee=TAKER_FEE, margin=0.995):
     """Largest stake a balance can actually cover once the taker fee is added.
 
-    Spending the whole balance fails: a $65.81 buy costs $65.81 plus 0.26%
-    fee = $65.98, which exceeds the balance. The margin leaves a little extra
+    Spending the whole balance fails: a $65.81 buy costs $65.81 plus the 0.80%
+    fee = $66.34, which exceeds the balance. The margin leaves a little extra
     room for the price moving between the quote and the fill.
     """
     return usd_balance / (1 + fee) * margin

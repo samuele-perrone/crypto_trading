@@ -70,7 +70,8 @@ python3 kraken_bot.py --pair BTC/USD --usd 50 --live
 ## Backtest results (deployed config)
 
 ETH/USD, SMA 20/30 on daily candles, no stop-loss/take-profit, 0.26% taker
-fee per side. Period: 2024-08-27 → 2026-08-16 (719 days), real Kraken data.
+fee per side (Kraken's fee when this was run; it is 0.80% since July 2026, so
+these returns are overstated by about 1.1 points per round trip). Period: 2024-08-27 → 2026-08-16 (719 days), real Kraken data.
 
 | Metric | Value |
 |---|---|
@@ -199,6 +200,7 @@ touching any of it.
 
 - SMA crossover is a simple trend-following strategy. It loses money in
   choppy/sideways markets. Backtest and dry-run before going live.
-- Market orders pay the spread plus Kraken's taker fee (~0.26%). Frequent
+- Market orders pay the spread plus Kraken's taker fee (0.80% per side at
+  the entry tier since July 2026; `TAKER_FEE` in `kraken_bot.py`). Frequent
   trading on small moves can lose money to fees alone.
 - Only trade money you can afford to lose. This is not financial advice.
