@@ -115,6 +115,17 @@ class KrakenClient:
         # Drop the still-forming last candle so signals use closed candles only.
         return [float(c[4]) for c in candles[:-1]]
 
+    def ohlc_candles(self, pair_name, interval_min):
+        """Closed candles as (open_time_unix, close) pairs, oldest first.
+
+        Same data and the same closed-only rule as ohlc_closes(), plus the
+        candle times the status page needs for its chart. The trading path
+        keeps using ohlc_closes().
+        """
+        result = self.public("OHLC", {"pair": pair_name, "interval": interval_min})
+        candles = next(v for k, v in result.items() if k != "last")
+        return [(int(c[0]), float(c[4])) for c in candles[:-1]]
+
     def balances(self):
         return {k: float(v) for k, v in self.private("Balance").items()}
 
@@ -216,6 +227,63 @@ def buy_reason(signal, closes, fast_n, slow_n, enter_on_trend=True):
         if fast_now > slow_now:
             return "SMA trend up"
     return None
+
+
+# ---------------------------------------------------------------------------
+# Look-ahead: what the next close must do to trigger a trade (informational)
+# ---------------------------------------------------------------------------
+
+def cross_trigger_price(closes, fast_n, slow_n):
+    """The next close at which the fast SMA would exactly meet the slow SMA.
+
+    Both SMAs move with the next close P, so the crossing point solves
+        (A + P) / fast_n = (B + P) / slow_n
+    where A and B are the sums of the last fast_n-1 and slow_n-1 closes:
+        P = (fast_n * B - slow_n * A) / (slow_n - fast_n)
+    A next close above P leaves the fast SMA above the slow one; below P,
+    beneath it. Returns None without enough history.
+    """
+    if fast_n >= slow_n or len(closes) < slow_n - 1:
+        return None
+    n = len(closes)
+    a = sum(closes[n - (fast_n - 1):])   # empty (0) when fast_n == 1
+    b = sum(closes[n - (slow_n - 1):])
+    return (fast_n * b - slow_n * a) / (slow_n - fast_n)
+
+
+def next_trade(closes, fast_n, slow_n, price, holding, enter_on_trend=True,
+               near_pct=3.0):
+    """What the next daily close has to do for the strategy to trade, or None.
+
+    Purely informational - nothing here decides a trade. Flat: a close above
+    `trigger` buys at the next tick. Holding: a close below it sells (SMA cross
+    down; a stop-loss or take-profit, when enabled, can also sell and is not
+    covered here). None when no single close can trigger a trade: too little
+    history, an unreachable (non-positive) trigger, or a state the rules only
+    leave via the opposite cross first.
+
+    `on_track` means the price right now is already past the trigger - if the
+    candle closed at this price, the bot would trade. `near` adds anything
+    within `near_pct` percent of it (0 disables the margin).
+    """
+    if not price or len(closes) < slow_n:
+        return None
+    trigger = cross_trigger_price(closes, fast_n, slow_n)
+    if trigger is None or trigger <= 0:
+        return None
+    fast_now, slow_now = sma(closes, fast_n), sma(closes, slow_n)
+    if holding:
+        if fast_now < slow_now:
+            return None  # already below: the cross-down edge cannot fire
+        side, on_track = "sell", price < trigger
+    else:
+        if fast_now > slow_now and not enter_on_trend:
+            return None  # cross-only entry needs a cross down first
+        side, on_track = "buy", price > trigger
+    distance_pct = (trigger / price - 1) * 100
+    near = on_track or (near_pct > 0 and abs(distance_pct) <= near_pct)
+    return {"side": side, "trigger": trigger, "distance_pct": distance_pct,
+            "on_track": on_track, "near": near}
 
 
 # ---------------------------------------------------------------------------

@@ -149,11 +149,31 @@ lives when no function is running.
    | `CRON_SECRET` | any random string (protects the endpoint) |
    | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | only when going live |
    | `ENTER_ON_TREND` | optional; default `true` — when flat, buy if fast SMA > slow SMA; `false` = only on a fresh cross up |
+   | `HEADS_UP_PCT` | optional; default `3` — the daily report leads with "⏳ BUY/SELL may be coming" when the next trade's trigger close is within this % of the price (`0` = only once the price is already past it) |
    | `LIVE` | unset = dry-run; `true` = real orders |
    | `VALIDATE` | `true` = send orders to Kraken with `validate=true` (nothing placed) |
 
 4. Deploy: pushing to `main` builds automatically; `vercel --prod --yes` is the
    fallback.
+
+### Daily report and status page
+
+When nothing trades, the daily 📊 Telegram report also says which close would
+trigger the next trade, e.g. `Next buy: daily close above $2,571.40 (+14.3%
+from now)`. The figure is exact: both SMAs include tomorrow's close, so the
+crossing point can be solved for (`cross_trigger_price()` in `kraken_bot.py`).
+When that close is within `HEADS_UP_PCT` of the price, the message leads with
+`⏳ BUY may be coming: …`.
+
+`GET /api/status` returns the same picture as JSON — price, SMAs, trend,
+open/flat with entry price, the next trigger, 180 days of closes and SMAs, and
+the crosses in that window. It is read-only and needs no secret, so it exposes
+no balances, volumes or order ids. A claude.ai dashboard artifact reads it
+through the Vercel connector.
+
+```sh
+curl https://<your-app>.vercel.app/api/status
+```
 
 Test a tick manually:
 ```sh

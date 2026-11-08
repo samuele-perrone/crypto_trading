@@ -5,11 +5,20 @@ Working notes for running this bot and picking the work back up later.
 deployed, how it behaves in production, why things are the way they are, and
 the traps that already cost time once.
 
-Last updated: 2026-11-03.
+Last updated: 2026-11-08.
 
 ## Current status
 
 - **Live URL:** `https://cryptotrading-omega.vercel.app/api/tick`
+- **Status URL (read-only, public):**
+  `https://cryptotrading-omega.vercel.app/api/status` — price, SMAs, the close
+  that would trigger the next trade, open/flat, 180 days of history. Feeds the
+  claude.ai "ETH bot" dashboard artifact through the Vercel connector. Added
+  2026-11-08; see **Decisions**.
+- **Daily report look-ahead (2026-11-08):** the 📊 heartbeat carries a
+  "Next buy/sell: daily close above/below $X" line, and leads with
+  "⏳ BUY/SELL may be coming" when the price is within `HEADS_UP_PCT`
+  (default 3%) of that close, or already past it. Unset in Vercel = default.
 - **Mode: LIVE since 2026-09-11.** `LIVE=true` in Vercel production — real
   market orders. The simulated position was deleted in the same change, so the
   bot started flat and enters only on a fresh cross up.
@@ -120,9 +129,41 @@ state.
    SMA is already above the slow one — see `buy_reason()`. In dry-run everything runs except the Kraken order call.
 6. Persist the new position, notify Telegram, return the tick as JSON (also
    printed to the Vercel function log).
+7. If nothing traded, compute the look-ahead with `next_trade()` — the next
+   daily close that would cross the SMAs (`cross_trigger_price()`). It runs
+   after every decision is final, is informational only, and sits in a
+   `try` so a bug there lands in `next_trade_error`, never in the trade.
 
 If nothing traded, it still sends a daily 📊 heartbeat so silence means
-"broken", not "no signal". Disable with `DAILY_REPORT=false`.
+"broken", not "no signal". Disable with `DAILY_REPORT=false`. The heartbeat
+includes the look-ahead line, and a ⏳ headline when the trigger is near.
+
+### The trigger price
+
+Tomorrow's SMAs both include tomorrow's close P, so the crossing point is
+exact, not an estimate: with A and B the sums of the last 19 and 29 closes,
+SMA20 = SMA30 when `P = (20·B − 30·A) / 10`. Flat, a close above P buys at the
+next 00:15 tick; holding, a close below P sells. `test_strategy` feeds every
+trigger back through `crossover_signal()` to prove it. When the SMAs are far
+apart the trigger can be unreachable (≤ 0, or a huge move); `next_trade()`
+returns None for the non-positive case and the report simply omits the line.
+
+### `/api/status` and the routing quirk
+
+The project deploys with Vercel's Python framework preset
+(`framework: python`), where the pyproject entrypoint `api.tick:handler` may
+receive every path. So `/api/status` is answered from **both** places:
+`api/status.py`'s own handler, and a dispatch at the top of
+`tick.handler.do_GET` that matches exactly `/api/status` (query ignored) and
+hands it to `status.status_response()`. Every other path, including
+`/api/tick`, still goes through the `CRON_SECRET` check and the tick, unchanged.
+
+The status path never trades or writes: keyless `KrakenClient()` (public
+calls only), and `load_position()` only, which pulls the Blob file into its own
+`/tmp` scratch copy and pushes nothing. `test_status` pins all of this. It also
+reports `checks.tick_module` — whether `api/tick.py` imports cleanly on the
+live deployment, a failure class that otherwise only shows as a missing
+heartbeat. Responses are CDN-cached 60 s.
 
 ## State storage
 
@@ -211,7 +252,7 @@ POST https://blob.vercel-storage.com/delete   {"urls": ["<blob url>"]}
 
 Four layers, because each catches what the others cannot.
 
-**1. Deterministic rules** — `python3 -m unittest test_strategy test_state_store`
+**1. Deterministic rules** — `python3 -m unittest test_strategy test_state_store test_status`
 
 No network, no keys, runs in a second. `test_strategy` covers when to buy, when
 to sell, and how much: crossover edges (the signal must fire once, not every
@@ -219,7 +260,11 @@ day of a trend), stop-loss and take-profit thresholds and their precedence, `0`
 meaning "disabled" rather than "sell at breakeven", and rounding that never
 overspends the stake. `test_state_store` stubs HTTP and pins the one-directional
 safety property — failing loudly is fine, reporting "no position" when one may
-be held is not. Run both after touching `kraken_bot.py` or `state_store.py`.
+be held is not. `test_status` covers the look-ahead and `/api/status`: the
+status payload never exposes volumes, never reaches a trading or writing call,
+and the handler routes only `/api/status` past the secret; a broken look-ahead
+or report formatter still delivers the heartbeat. Run all three after touching
+`kraken_bot.py`, `state_store.py` or anything in `api/`.
 
 **2. End-to-end sell rehearsal** — `python3 rehearse_sell.py`
 
@@ -312,6 +357,18 @@ Env var changes only take effect on a new deployment. Watch the next tick, and
 keep in mind a signal may not appear for weeks — 13 trades in 2 years.
 
 ## Decisions
+
+**Look-ahead in the daily report, and a public read-only status endpoint
+(2026-11-08).** Asked for: a Telegram heads-up before a trade, and a
+dashboard. The heads-up is folded into the existing daily 📊 message (a ⏳
+headline when near) rather than a second message, so there is still exactly
+one message a day and "no message" still means "broken". The dashboard is a
+claude.ai artifact; artifacts cannot call outside hosts, so it reads
+`/api/status` through the claude.ai Vercel connector (`web_fetch_vercel_url`).
+The endpoint is public rather than secret-protected because a token embedded
+in the artifact page would be no secret; instead it exposes nothing beyond
+market data, the rules, open/flat and the entry price — no balances, volumes
+or txids. Supabase was not considered, per the 2026-08-20 decision below.
 
 **Enter on trend state, not only on the cross (2026-11-03).** Live since
 2026-09-11 with zero trades: the bot went live flat while SMA20 was already

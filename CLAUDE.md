@@ -39,6 +39,8 @@ dependencies.
 ```sh
 # Strategy rules: deterministic, no network, run after touching kraken_bot.py
 python3 -m unittest test_strategy
+# Everything (rules, state store, look-ahead + /api/status routing)
+python3 -m unittest test_strategy test_state_store test_status
 python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
 
 # Rehearse a full sell without waiting for the market (isolated Blob namespace)
@@ -77,6 +79,13 @@ Two independent entry points share one strategy core:
 - **`api/tick.py`** — the deployed path. A `BaseHTTPRequestHandler` invoked by
   Vercel Cron daily at 00:15 UTC (`vercel.json`). One GET = one tick. Uses
   `state_store.py`, not the JSON file.
+
+A third, **`api/status.py`**, is read-only: `GET /api/status` for the
+dashboard (price, SMAs, next-trade trigger, open/flat, history). Because the
+project deploys with the Python framework preset, the pyproject entrypoint
+`api.tick:handler` may receive every path, so `tick.handler.do_GET` dispatches
+exactly `/api/status` to `status.status_response()` before the `CRON_SECRET`
+check; every other path is unchanged. See `OPERATIONS.md`.
 
 So there are **two separate state stores** by design, and strategy logic lives
 in `kraken_bot.py` — a rule change must be made there to affect both, and
@@ -118,7 +127,13 @@ recorded in `OPERATIONS.md`.
   the cost above it — so every stake is capped by `affordable_usd()`.
   `TRADE_PCT` sizes from the live balance instead of a fixed amount.
 - **Notifications must never break trading.** `notify()` swallows exceptions by
-  design.
+  design. The same goes for the daily report's look-ahead (`next_trade()`,
+  `next_trade_line()`, `heads_up_text()`): it runs only after the trade
+  decision, inside `try`, and failures go to `next_trade_error`.
+- **`/api/status` stays read-only and secret-free.** Keyless `KrakenClient()`,
+  `load_position()` only — never `save_position()`, never a private call. It
+  is public, so it must not expose balances, volumes or txids.
+  `test_status` guards both.
 - **Config reads treat empty env vars as unset** (`os.environ.get(X) or
   default`) — Vercel stores unset vars as empty strings.
 - **Judge strategy changes on total return, not win rate**, and back them with

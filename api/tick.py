@@ -10,6 +10,9 @@ Called on a schedule (see vercel.json). Reads config from env vars:
     STOP_LOSS_PCT   0 disables                        (default 0)
     TAKE_PROFIT_PCT 0 disables                        (default 0)
     LIVE            "true" places real orders         (default: dry run)
+    HEADS_UP_PCT    daily report leads with "⏳ may be coming" when the
+                    next trade's trigger close is within this % of the
+                    price; 0 = only when already past it  (default 3)
     KRAKEN_API_KEY / KRAKEN_API_SECRET   required only when LIVE=true
     CRON_SECRET     if set, requests must carry Authorization: Bearer <secret>
 
@@ -28,10 +31,12 @@ import os
 import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlsplit
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))  # for `import status`
 from kraken_bot import (KrakenClient, sma, crossover_signal, buy_reason,  # noqa: E402
-                        sell_reason, buy_volume, trade_stake)
+                        sell_reason, buy_volume, trade_stake, next_trade)
 from state_store import (load_position, save_position,  # noqa: E402
                          state_location, is_ephemeral)
 
@@ -52,6 +57,22 @@ def notify(text):
                       json={"chat_id": chat_id, "text": text}, timeout=10)
     except Exception:
         pass  # notifications must never break trading
+
+
+def next_trade_line(nt):
+    """One line for the daily report: the close that would trigger the next trade."""
+    word = "above" if nt["side"] == "buy" else "below"
+    return (f"Next {nt['side']}: daily close {word} ${nt['trigger']:,.2f} "
+            f"({nt['distance_pct']:+.1f}% from now)")
+
+
+def heads_up_text(nt):
+    """Headline for the daily report when the next close could trade, else None."""
+    if not nt or not nt["near"]:
+        return None
+    word = "above" if nt["side"] == "buy" else "below"
+    return (f"⏳ {nt['side'].upper()} may be coming: a daily close {word} "
+            f"${nt['trigger']:,.2f} at 00:00 UTC triggers it at the 00:15 tick")
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +186,22 @@ def run_tick():
                 notify(f"🟢 BOUGHT {volume} {pair_arg} @ ${price:,.2f} "
                        f"(~${stake:.2f}, {entry_reason}) [{out['mode']}]")
 
+    # Look-ahead for the report: which close would trigger the next trade.
+    # Informational only, computed after every decision above is final, and
+    # fenced off so a bug here can never cost the trade or the heartbeat.
+    nt = None
+    if out["action"] == "none":
+        try:
+            heads_up_pct = float(os.environ.get("HEADS_UP_PCT") or 3)
+            nt = next_trade(closes, fast, slow, price, bool(position),
+                            enter_on_trend, heads_up_pct)
+            if nt:
+                out["next_trade"] = {**nt, "trigger": round(nt["trigger"], 2),
+                                     "distance_pct": round(nt["distance_pct"], 2)}
+        except Exception as e:
+            nt = None
+            out["next_trade_error"] = str(e)
+
     # Daily proof-of-life when nothing traded (disable with DAILY_REPORT=false)
     if out["action"] == "none" and os.environ.get("DAILY_REPORT", "true").lower() != "false":
         if position:
@@ -173,8 +210,17 @@ def run_tick():
         else:
             status = ("no position, waiting for SMA trend up" if enter_on_trend
                       else "no position, waiting for SMA cross up")
-        notify(f"📊 {pair_arg} ${price:,.2f} | SMA{fast} {out['sma_fast']:,.2f} vs "
-               f"SMA{slow} {out['sma_slow']:,.2f} | {status} [{out['mode']}]")
+        report = (f"📊 {pair_arg} ${price:,.2f} | SMA{fast} {out['sma_fast']:,.2f} vs "
+                  f"SMA{slow} {out['sma_slow']:,.2f} | {status} [{out['mode']}]")
+        try:
+            if nt:
+                report += "\n" + next_trade_line(nt)
+                headline = heads_up_text(nt)
+                if headline:
+                    report = headline + "\n" + report
+        except Exception as e:
+            out["next_trade_error"] = str(e)
+        notify(report)
 
     return out
 
@@ -183,8 +229,33 @@ def run_tick():
 # HTTP handler
 # ---------------------------------------------------------------------------
 
+def is_status_path(path):
+    """True only for the read-only status route, /api/status (query ignored)."""
+    return urlsplit(path or "").path.rstrip("/") == "/api/status"
+
+
 class handler(BaseHTTPRequestHandler):
+    def _serve_status(self):
+        # Read-only (see api/status.py), so no CRON_SECRET. Imported lazily so
+        # a problem in the status code can never stop the module - and with it
+        # the tick - from loading.
+        try:
+            import status
+            code, headers, data = status.status_response()
+        except Exception as e:
+            code = 500
+            headers = {"Content-Type": "application/json", "Cache-Control": "no-store"}
+            data = json.dumps({"error": f"status unavailable: {e}"}).encode()
+        self.send_response(code)
+        for k, v in headers.items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
+        if is_status_path(self.path):
+            self._serve_status()
+            return
         secret = os.environ.get("CRON_SECRET")
         if secret and self.headers.get("Authorization") != f"Bearer {secret}":
             self.send_response(401)
