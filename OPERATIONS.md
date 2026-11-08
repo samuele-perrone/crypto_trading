@@ -424,6 +424,18 @@ The same logic argues against a tight stop-loss — the worst trade was only
 
 ## Gotchas
 
+- **Every path reaches `tick.handler`, not just `/api/tick`.** With the
+  Python framework preset and the pyproject entrypoint, a request for
+  `/api/status` *before* the 2026-11-08 change came back 401 — it had hit
+  the tick handler's `CRON_SECRET` check, not a 404. So a new route cannot be
+  added by dropping a file in `api/` alone; it needs the dispatch at the top
+  of `tick.handler.do_GET` (see "`/api/status` and the routing quirk").
+  Branch pushes build a preview: test a new route on the preview URL first.
+- **The claude.ai Vercel connector needs the team authorised**, separately
+  from the project: until then `web_fetch_vercel_url` and deployment reads
+  fail with 403 "Not authorized ... scope". `authorize_team_access` gives a
+  one-time consent link.
+
 - **Freshly bought coin is not immediately sellable.** A smoke trade on
   2026-09-11 bought 0.001 ETH, `Balance` reported the full `0.0010000000`, and
   an immediate sell of that exact amount was rejected with
