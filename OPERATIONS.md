@@ -460,6 +460,18 @@ The same logic argues against a tight stop-loss — the worst trade was only
 
 ## Gotchas
 
+- **Filling stops at exactly the stop price invents an edge.** In
+  `pattern_backtest.py`, a trailing stop on simulated no-edge paths "beat"
+  buy-and-hold by ~30% over 200 days purely because the simulated sell happened
+  at the level, while a bot that checks every few minutes sells after the price
+  has already crossed it. Stops now fill below the level by the expected
+  overshoot (`stop_slip()`, Siegmund's 0.5826 × one check's volatility) and
+  `test_pattern.TestStopsDoNotCreateEdge` pins it. Any new backtest with stops
+  needs the same check: run it on a random walk and confirm it does not win.
+- **Coinbase does not list every Kraken coin.** TRX, SPX and TRUMP needed
+  Binance's public data dumps (`data.binance.vision`, timestamps in ms before
+  2025 and microseconds after) or KuCoin; both answer from GitHub's runners.
+
 - **Exchange fees change under you.** Kraken's July 2026 fee change tripled
   the taker fee with no API-visible signal, and the bot's sizing silently
   became $0.02 too large to fill. Check Kraken's fee schedule (and the
@@ -507,6 +519,30 @@ The same logic argues against a tight stop-loss — the worst trade was only
   figure as indicative, not exact.
 
 ## Ideas not pursued
+
+- **The old PHP bot's MACD/EMA rule and the other patterns in its repo
+  (2026-11-08).** `samuele-perrone/crypto-signals` ran 22 coins at $60 a
+  trade on 4h candles (it "worked a bit, then started losing"). Ported exactly
+  to `pattern_backtest.py` (results in `pattern_results.md`, run by the
+  `pattern-backtest` workflow on its own branch), 22 coins, 2024-11-09 →
+  2026-11-08, Coinbase hourly candles (TRX from Binance's data dumps, SPX and
+  TRUMP from KuCoin), 0.40%/side unless stated. The live rule as it ran — on
+  the still-forming candle, 3% trailing stop — lost 93% (82% at the 0.25% it
+  paid in 2025), on all 22 coins and in every one of the 8 quarters,
+  including May–Jul 2025 when buy-and-hold made +22%. It traded 178 times a
+  coin a year and had no edge before fees (−5.8%). Closed candles only: −84%;
+  no stop: −62%; daily candles: −39%. Every 4h pattern in the repo lost 34–99%
+  (MACD, EMA50, the chatgpt.txt spec, volume profile, Heikin Ashi,
+  Supertrend). Buy-and-hold lost 35%. Only slow daily trend filters with a
+  handful of trades a year came out ahead of buy-and-hold: Supertrend 10/3
+  +8.7% (neighbours 7/3 +5.1%, 14/3 +16.0%, 10/2 +0.8%, 10/4 −8.6%; +1.9% at
+  0.80% taker), price above EMA50 −5.2%, SMA 20/30 −8.5% (−18.0% at its real
+  0.80%). They "won" mostly by being out during the crash: every one lost in
+  Year 2 (−13% to −32% against buy-and-hold's −51%). On ETH alone SMA 20/30
+  beat Supertrend 10/3 (+124% vs +54%), so no change to the deployed rule; a
+  longer-history ETH comparison would be the test before considering one. The
+  PHP bot's bugs were fixed in its own repo (PR #1) without changing this
+  verdict.
 
 - **Day trading: buy in the morning, sell at the first profit or at the end
   of the day (2026-11-08).** Tested with `intraday_backtest.py` (results in
