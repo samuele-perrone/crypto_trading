@@ -14,7 +14,8 @@ import unittest
 
 from kraken_bot import (sma, crossover_signal, buy_reason, sell_reason, buy_volume,
                         affordable_usd, trade_stake, TAKER_FEE,
-                        cross_trigger_price, next_trade)
+                        cross_trigger_price, next_trade, average_needed,
+                        days_if_flat, PATH_DAYS)
 
 
 def ramp(start, step, n):
@@ -266,11 +267,84 @@ class TestNextTrade(unittest.TestCase):
     def test_not_enough_history(self):
         self.assertIsNone(next_trade([1, 2, 3], 20, 30, 3, False))
 
-    def test_strong_trend_has_no_reachable_sell(self):
-        """Fast SMA far above slow: no positive close can cross it down."""
+    def test_strong_trend_has_no_one_day_sell_but_still_a_path(self):
+        """Fast SMA far above slow: no single close crosses it down, but the
+        look-ahead still says what an average over more days would take."""
         strong = ramp(100, 1, 48)
         self.assertLessEqual(cross_trigger_price(strong, 20, 30), 0)
-        self.assertIsNone(next_trade(strong, 20, 30, strong[-1], True))
+        nt = next_trade(strong, 20, 30, strong[-1], True)
+        self.assertEqual(nt["side"], "sell")
+        self.assertIsNone(nt["trigger"])
+        self.assertFalse(nt["near"])
+        self.assertTrue(any(p["avg_needed"] for p in nt["path"]))
+
+    def test_path_covers_each_horizon(self):
+        nt = next_trade(self.DOWN, 20, 30, self.DOWN[-1], False)
+        self.assertEqual([p["days"] for p in nt["path"]], list(PATH_DAYS))
+        self.assertAlmostEqual(nt["path"][0]["avg_needed"], nt["trigger"], places=2)
+
+
+# The 30 daily ETH/USD closes up to 2026-11-07, as the live bot saw them on
+# 2026-11-08. The figures below are the ones quoted to the user that day.
+ETH_2026_11_07 = [
+    2485.34, 2504.09, 2534.19, 2444.10, 2495.97, 2418.61, 2439.39, 2420.22,
+    2399.70, 2407.51, 2405.43, 2446.73, 2471.70, 2386.08, 2384.52, 2355.56,
+    2326.50, 2320.45, 2347.34, 2357.22, 2249.01, 2241.37, 2252.50, 2272.35,
+    2249.46, 2271.45, 2423.16, 2235.01, 2235.43, 2236.88]
+
+
+class TestAverageNeeded(unittest.TestCase):
+    DOWN = TestCrossTriggerPrice.DOWN
+    UP = TestCrossTriggerPrice.UP
+
+    def test_one_day_is_the_trigger(self):
+        self.assertAlmostEqual(average_needed(self.DOWN, 20, 30, 1),
+                               cross_trigger_price(self.DOWN, 20, 30))
+
+    def test_holding_the_average_crosses_by_that_day(self):
+        """Fed back through sma(): just above crosses up, just below doesn't."""
+        for days in PATH_DAYS:
+            p = average_needed(self.DOWN, 20, 30, days)
+            hi = self.DOWN + [p * 1.002] * days
+            lo = self.DOWN + [p * 0.998] * days
+            self.assertGreater(sma(hi, 20), sma(hi, 30), days)
+            self.assertLess(sma(lo, 20), sma(lo, 30), days)
+
+    def test_sell_side_mirror(self):
+        for days in PATH_DAYS:
+            p = average_needed(self.UP, 20, 30, days)
+            lo = self.UP + [p * 0.998] * days
+            self.assertLess(sma(lo, 20), sma(lo, 30), days)
+
+    def test_no_answer_once_both_smas_are_all_steady(self):
+        self.assertIsNone(average_needed(self.DOWN, 20, 30, 30))
+        self.assertIsNone(average_needed([1, 2], 20, 30, 5))
+
+    def test_real_figures_from_2026_11_08(self):
+        expect = {1: 4875.70, 5: 2797.22, 10: 2493.64, 15: 2302.77, 20: 2266.66}
+        for days, price in expect.items():
+            self.assertAlmostEqual(average_needed(ETH_2026_11_07, 20, 30, days),
+                                   price, places=1)
+
+
+class TestDaysIfFlat(unittest.TestCase):
+    DOWN = TestCrossTriggerPrice.DOWN
+    UP = TestCrossTriggerPrice.UP
+
+    def test_above_the_one_day_trigger_crosses_next_day(self):
+        p = cross_trigger_price(self.DOWN, 20, 30)
+        self.assertEqual(days_if_flat(self.DOWN, 20, 30, p * 1.01, False), 1)
+
+    def test_holding_below_the_sell_trigger_crosses_next_day(self):
+        p = cross_trigger_price(self.UP, 20, 30)
+        self.assertEqual(days_if_flat(self.UP, 20, 30, p * 0.99, True), 1)
+
+    def test_steady_price_at_the_lows_never_crosses(self):
+        self.assertIsNone(days_if_flat(self.DOWN, 20, 30, 97, False))
+
+    def test_real_case_flat_eth_never_buys(self):
+        """2026-11-08: ETH holding at $2,225 never lifts SMA20 over SMA30."""
+        self.assertIsNone(days_if_flat(ETH_2026_11_07, 20, 30, 2225.08, False))
 
 
 if __name__ == "__main__":

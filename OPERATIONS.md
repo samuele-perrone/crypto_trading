@@ -16,12 +16,13 @@ Last updated: 2026-11-08.
   claude.ai "ETH bot" dashboard artifact through the Vercel connector. Added
   2026-11-08; see **Decisions**.
 - **Daily report look-ahead (2026-11-08):** the 📊 heartbeat carries a
-  "Next buy/sell: daily close above/below $X" line, and leads with
-  "⏳ BUY/SELL may be coming" when the price is within `HEADS_UP_PCT`
-  (default 3%) of that close, or already past it. Unset in Vercel = default.
-  A trigger more than 20% away (`FAR_PCT`) gets "- not a one-day move yet":
-  on 2026-11-08 the buy trigger was $4,875.70 with ETH at $2,223 (+119%),
-  exact but meaningless as a one-day target.
+  "Next buy/sell" line. Normally it leads with the cross, not a price ("when
+  SMA20 closes above SMA30, at whatever the price is then") and quotes the
+  steady average ETH needs to get there within 10 and 20 days, plus whether
+  today's price held flat ever does. When the very next close could trade —
+  within `HEADS_UP_PCT` (default 3%) of the one-day trigger, or already past
+  it — it names that close instead and leads with "⏳ BUY/SELL may be coming".
+  Unset in Vercel = default.
 - **Mode: LIVE since 2026-09-11.** `LIVE=true` in Vercel production — real
   market orders. The simulated position was deleted in the same change, so the
   bot started flat and enters only on a fresh cross up.
@@ -149,7 +150,20 @@ SMA20 = SMA30 when `P = (20·B − 30·A) / 10`. Flat, a close above P buys at t
 next 00:15 tick; holding, a close below P sells. `test_strategy` feeds every
 trigger back through `crossover_signal()` to prove it. When the SMAs are far
 apart the trigger can be unreachable (≤ 0, or a huge move); `next_trade()`
-returns None for the non-positive case and the report simply omits the line.
+sets `trigger` to None for the non-positive case.
+
+**The one-day trigger is not the bar to clear.** The bot trades at whatever
+the price is once the cross happens; the trigger is only what forces it *by
+tomorrow*. On 2026-11-08 it read $4,875.70 with ETH at $2,225 (+119%) and was
+read as "the bot waits for $4,875" (see **Decisions**). So `next_trade()` also
+returns `path`: for 1, 5, 10, 15 and 20 more closes, the steady average close
+that gets the cross by then (`average_needed()`; same algebra with N closes:
+`P = (20·B − 30·A) / (10·N)`, A and B now the last 20−N and 30−N closes), and
+`days_if_flat`: closes at today's price until the cross, or None. That day the
+path read $2,797 / $2,494 / $2,303 / $2,267 for 13 / 18 / 23 / 28 Nov, and
+flat never crossed: SMA20 > SMA30 just means the last 20 closes average above
+the 10 before them, so it needs recent prices to beat slightly older ones.
+`test_strategy` pins those real figures.
 
 ### `/api/status` and the routing quirk
 
@@ -360,6 +374,14 @@ Env var changes only take effect on a new deployment. Watch the next tick, and
 keep in mind a signal may not appear for weeks — 13 trades in 2 years.
 
 ## Decisions
+
+**Lead the look-ahead with the cross and an average path, not the one-day
+trigger (2026-11-08).** The first version reported "the next buy needs a daily
+close above $4,875.70", which reads as a price target the bot waits for. It
+does not: it buys at any price once SMA20 closes above SMA30. The one-day
+figure is now shown only when it is close enough to matter (`near`); otherwise
+the report and dashboard show the average needed by date. Replaced the
+interim "- not a one-day move yet" suffix (`FAR_PCT`) the same day.
 
 **Look-ahead in the daily report, and a public read-only status endpoint
 (2026-11-08).** Asked for: a Telegram heads-up before a trade, and a

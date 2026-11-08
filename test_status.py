@@ -15,7 +15,7 @@ tick output, not raised.
 import os
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "api"))
@@ -78,6 +78,15 @@ class TestStatusPayload(unittest.TestCase):
         self.assertAlmostEqual(out["next_trade"]["trigger"],
                                cross_trigger_price(DOWN, 20, 30), places=2)
         self.assertEqual(out["mode"], "dry-run")
+
+    def test_path_dates_are_when_the_tick_acts(self):
+        out = status.build_status(FakeClient(DOWN, DOWN[-1]), lambda k: None, CFG)
+        last = datetime.fromtimestamp(T0 + (len(DOWN) - 1) * DAY, timezone.utc).date()
+        first = out["next_trade"]["path"][0]
+        self.assertEqual(first["days"], 1)
+        # One more close (tonight's) is acted on at the next 00:15 tick.
+        self.assertEqual(first["by"], (last + timedelta(days=2)).isoformat())
+        self.assertEqual([p["days"] for p in out["next_trade"]["path"]], [1, 5, 10, 15, 20])
 
     def test_history_and_times(self):
         out = status.build_status(FakeClient(DOWN, DOWN[-1]), lambda k: None, CFG)
@@ -148,17 +157,39 @@ class TestReportText(unittest.TestCase):
         self.assertIsNone(tick.heads_up_text({**self.NT, "near": False}))
         self.assertIsNone(tick.heads_up_text(None))
 
-    def test_far_trigger_is_flagged(self):
-        """Real case 2026-11-08: buy trigger $4,875.70 with ETH at $2,223."""
-        far = {**self.NT, "trigger": 4875.7, "distance_pct": 119.3, "near": False}
-        self.assertTrue(tick.next_trade_line(far).endswith("not a one-day move yet"))
-        self.assertNotIn("one-day", tick.next_trade_line(self.NT))
+    # Real case 2026-11-08: one-day buy trigger $4,875.70 with ETH at $2,225.
+    FAR = {"side": "buy", "trigger": 4875.7, "distance_pct": 119.1,
+           "on_track": False, "near": False, "days_if_flat": None,
+           "path": [{"days": 1, "avg_needed": 4875.7, "vs_now_pct": 119.1},
+                    {"days": 10, "avg_needed": 2493.64, "vs_now_pct": 12.07},
+                    {"days": 20, "avg_needed": 2266.66, "vs_now_pct": 1.87}]}
+
+    def test_far_leads_with_the_cross_not_a_price(self):
+        from datetime import date
+        line = tick.next_trade_line(self.FAR, 20, 30, today=date(2026, 11, 8))
+        self.assertTrue(line.startswith(
+            "Next buy: when SMA20 closes above SMA30, at whatever the price is then."))
+        self.assertIn("by 18 Nov averaging above $2,494 (+12.1%)", line)
+        self.assertIn("or by 28 Nov averaging above $2,267 (+1.9%)", line)
+        self.assertTrue(line.endswith("Flat at today's price, it never does."))
+        self.assertNotIn("4,875", line)
+
+    def test_flat_days_and_unreachable_one_day_trigger(self):
+        nt = {**self.FAR, "trigger": None, "distance_pct": None, "days_if_flat": 7}
+        line = tick.next_trade_line(nt, 20, 30)
+        self.assertIn("Flat at today's price: in 7 days.", line)
+
+    def test_near_names_the_one_close(self):
+        self.assertTrue(tick.next_trade_line(self.NT, 20, 30).startswith(
+            "Next buy: daily close above $2,310.50 (+2.7% from now)"))
 
     def test_sell_wording(self):
         nt = {**self.NT, "side": "sell", "distance_pct": -1.2}
         self.assertIn("below $2,310.50", tick.heads_up_text(nt))
-        self.assertIn("Next sell: daily close below", tick.next_trade_line(nt))
-        self.assertIn("-1.2%", tick.next_trade_line(nt))
+        self.assertIn("Next sell: daily close below", tick.next_trade_line(nt, 20, 30))
+        self.assertIn("-1.2%", tick.next_trade_line(nt, 20, 30))
+        far = {**self.FAR, "side": "sell"}
+        self.assertIn("when SMA20 closes below SMA30", tick.next_trade_line(far, 20, 30))
 
 
 class TestTickReport(unittest.TestCase):
@@ -189,19 +220,21 @@ class TestTickReport(unittest.TestCase):
         self.assertEqual(out["action"], "none")
         self.assertEqual(len(sent), 1)
         self.assertTrue(sent[0].startswith("📊 ETH/USD"))
-        self.assertIn("Next buy: daily close above", sent[0])
+        self.assertIn("Next buy: when SMA20 closes above SMA30", sent[0])
         self.assertFalse(out["next_trade"]["near"])
+        self.assertEqual(len(out["next_trade"]["path"]), 5)
 
     def test_near_trigger_leads_with_heads_up(self):
         trigger = cross_trigger_price(DOWN, 20, 30)
         out, sent = self.run_tick(DOWN, trigger / 1.02)
         self.assertTrue(sent[0].startswith("⏳ BUY may be coming"))
         self.assertIn("\n📊 ETH/USD", sent[0])
+        self.assertIn("Next buy: daily close above", sent[0])
 
     def test_holding_watches_for_sell(self):
         out, sent = self.run_tick(UP, UP[-1], {"volume": 0.02, "entry": 120.0})
         self.assertEqual(out["action"], "none")
-        self.assertIn("Next sell: daily close below", sent[0])
+        self.assertIn("Next sell: when SMA20 closes below SMA30", sent[0])
 
     def test_lookahead_failure_never_drops_the_heartbeat(self):
         def broken(*a, **k):

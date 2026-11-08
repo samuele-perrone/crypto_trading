@@ -251,39 +251,105 @@ def cross_trigger_price(closes, fast_n, slow_n):
     return (fast_n * b - slow_n * a) / (slow_n - fast_n)
 
 
+PATH_DAYS = (1, 5, 10, 15, 20)  # horizons for "average needed by date"
+
+
+def average_needed(closes, fast_n, slow_n, days):
+    """The steady close that, held for `days` daily closes, lands the fast SMA
+    exactly on the slow one at the end.
+
+    With A and B the sums of the last fast_n-days and slow_n-days known closes,
+        (A + days*P) / fast_n = (B + days*P) / slow_n
+    gives P = (fast_n*B - slow_n*A) / (days * (slow_n - fast_n)). Once days
+    reaches fast_n the fast SMA is all steady closes (A = 0) and this is
+    B / (slow_n - days). Averaging above P gets the fast SMA above the slow one
+    by that day; below P, beneath it. days = 1 is cross_trigger_price(). None
+    without enough history, or from slow_n days on, when both SMAs are the
+    steady price and cannot cross.
+    """
+    n = len(closes)
+    if fast_n >= slow_n or days < 1 or days >= slow_n or n < slow_n - 1:
+        return None
+    b = sum(closes[n - (slow_n - days):])
+    if days < fast_n:
+        a = sum(closes[n - (fast_n - days):])
+        return (fast_n * b - slow_n * a) / (days * (slow_n - fast_n))
+    return b / (slow_n - days)
+
+
+def days_if_flat(closes, fast_n, slow_n, price, holding):
+    """Daily closes at `price` until the next trade's cross, or None.
+
+    Flat waits for fast > slow, holding for fast < slow. A steady price makes
+    both SMAs equal after slow_n closes, so a cross that has not come by then
+    never comes; that bounds the loop.
+    """
+    c = list(closes)
+    for d in range(1, slow_n + 1):
+        c.append(price)
+        f, s = sma(c, fast_n), sma(c, slow_n)
+        if f is None or s is None:
+            return None
+        if (f < s) if holding else (f > s):
+            return d
+    return None
+
+
 def next_trade(closes, fast_n, slow_n, price, holding, enter_on_trend=True,
                near_pct=3.0):
-    """What the next daily close has to do for the strategy to trade, or None.
+    """What the coming daily closes have to do for the strategy to trade.
 
-    Purely informational - nothing here decides a trade. Flat: a close above
-    `trigger` buys at the next tick. Holding: a close below it sells (SMA cross
-    down; a stop-loss or take-profit, when enabled, can also sell and is not
-    covered here). None when no single close can trigger a trade: too little
-    history, an unreachable (non-positive) trigger, or a state the rules only
-    leave via the opposite cross first.
+    Purely informational - nothing here decides a trade. The bot trades at
+    whatever the price is at the first tick after the cross; these figures only
+    say how far away that cross is:
 
-    `on_track` means the price right now is already past the trigger - if the
-    candle closed at this price, the bot would trade. `near` adds anything
-    within `near_pct` percent of it (0 disables the margin).
+    - `trigger`: the single next close that would cross the SMAs (None when no
+      positive close can). Flat: a close above it buys at the next tick;
+      holding: a close below it sells (SMA cross down - a stop-loss or
+      take-profit, when enabled, can also sell and is not covered here).
+      Often far from the price; meaningful when `near`.
+    - `path`: for each of PATH_DAYS, the steady average close that gets the
+      cross by then (`avg_needed`, None if no positive price can).
+    - `days_if_flat`: closes at today's price until the cross, or None.
+
+    `on_track`: the price is already past `trigger` - if the candle closed now,
+    the bot would trade. `near`: on track, or within `near_pct` % of `trigger`
+    (0 disables the margin). Returns None with too little history, or in a
+    state the rules only leave via the opposite cross first.
     """
     if not price or len(closes) < slow_n:
-        return None
-    trigger = cross_trigger_price(closes, fast_n, slow_n)
-    if trigger is None or trigger <= 0:
         return None
     fast_now, slow_now = sma(closes, fast_n), sma(closes, slow_n)
     if holding:
         if fast_now < slow_now:
             return None  # already below: the cross-down edge cannot fire
-        side, on_track = "sell", price < trigger
+        side = "sell"
     else:
         if fast_now > slow_now and not enter_on_trend:
             return None  # cross-only entry needs a cross down first
-        side, on_track = "buy", price > trigger
-    distance_pct = (trigger / price - 1) * 100
-    near = on_track or (near_pct > 0 and abs(distance_pct) <= near_pct)
+        side = "buy"
+
+    trigger = cross_trigger_price(closes, fast_n, slow_n)
+    if trigger is None or trigger <= 0:
+        trigger = distance_pct = None
+        on_track = near = False
+    else:
+        on_track = price < trigger if holding else price > trigger
+        distance_pct = (trigger / price - 1) * 100
+        near = on_track or (near_pct > 0 and abs(distance_pct) <= near_pct)
+
+    path = []
+    for d in PATH_DAYS:
+        p = average_needed(closes, fast_n, slow_n, d)
+        if p is None:
+            continue
+        ok = p > 0
+        path.append({"days": d,
+                     "avg_needed": round(p, 2) if ok else None,
+                     "vs_now_pct": round((p / price - 1) * 100, 2) if ok else None})
     return {"side": side, "trigger": trigger, "distance_pct": distance_pct,
-            "on_track": on_track, "near": near}
+            "on_track": on_track, "near": near, "path": path,
+            "days_if_flat": days_if_flat(closes, fast_n, slow_n, price, holding)}
 
 
 # ---------------------------------------------------------------------------

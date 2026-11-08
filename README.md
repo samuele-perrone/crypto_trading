@@ -158,12 +158,22 @@ lives when no function is running.
 
 ### Daily report and status page
 
-When nothing trades, the daily 📊 Telegram report also says which close would
-trigger the next trade, e.g. `Next buy: daily close above $2,571.40 (+14.3%
-from now)`. The figure is exact: both SMAs include tomorrow's close, so the
-crossing point can be solved for (`cross_trigger_price()` in `kraken_bot.py`).
-When that close is within `HEADS_UP_PCT` of the price, the message leads with
-`⏳ BUY may be coming: …`.
+When nothing trades, the daily 📊 Telegram report also says what it takes for
+the next trade. The bot trades at whatever the price is once the SMAs cross,
+so the line leads with the cross, then the steady average ETH needs to get
+there, e.g.
+
+```
+Next buy: when SMA20 closes above SMA30, at whatever the price is then. ETH
+gets there by 18 Nov averaging above $2,494 (+12.1%), or by 28 Nov averaging
+above $2,267 (+1.9%). Flat at today's price, it never does.
+```
+
+The figures are exact, not estimates: both SMAs include the coming closes, so
+the crossing point can be solved for (`average_needed()` in `kraken_bot.py`).
+When the very next close is within `HEADS_UP_PCT` of crossing them
+(`cross_trigger_price()`), the message leads with `⏳ BUY may be coming: …`
+and names that close.
 
 `GET /api/status` returns the same picture as JSON — price, SMAs, trend,
 open/flat with entry price, the next trigger, 180 days of closes and SMAs, and

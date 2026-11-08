@@ -29,7 +29,7 @@ BOT_DB_PATH at durable storage, or run the bot somewhere with a real disk.
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlsplit
 
@@ -59,16 +59,47 @@ def notify(text):
         pass  # notifications must never break trading
 
 
-FAR_PCT = 20  # past this, the trigger is exact but no realistic one-day move
+REPORT_PATH_DAYS = (10, 20)  # horizons quoted in the daily report
 
 
-def next_trade_line(nt):
-    """One line for the daily report: the close that would trigger the next trade."""
-    word = "above" if nt["side"] == "buy" else "below"
-    line = (f"Next {nt['side']}: daily close {word} ${nt['trigger']:,.2f} "
-            f"({nt['distance_pct']:+.1f}% from now)")
-    if abs(nt["distance_pct"]) > FAR_PCT:
-        line += " - not a one-day move yet"
+def _day_month(d):
+    return f"{d.day} {d.strftime('%b')}"  # portable "18 Nov" (no %-d)
+
+
+def round_next_trade(nt):
+    """next_trade() with its one-day figures rounded for JSON output."""
+    r = lambda v: None if v is None else round(v, 2)  # noqa: E731
+    return {**nt, "trigger": r(nt["trigger"]), "distance_pct": r(nt["distance_pct"])}
+
+
+def next_trade_line(nt, fast, slow, today=None):
+    """The daily report's line on what it takes for the next trade.
+
+    The bot trades at whatever the price is at the first tick after the SMA
+    cross, so the line leads with the cross, not a price. When the very next
+    close could do it (`near`), it names that close; otherwise it quotes the
+    steady average that gets the cross by REPORT_PATH_DAYS, and whether
+    today's price held flat ever does. Dates are when the 00:15 tick acts:
+    a tick on day D sees closes up to D, so N more closes act on D + N.
+    """
+    side = nt["side"]
+    word = "above" if side == "buy" else "below"
+    if nt["near"] and nt["trigger"] is not None:
+        return (f"Next {side}: daily close {word} ${nt['trigger']:,.2f} "
+                f"({nt['distance_pct']:+.1f}% from now)")
+    today = today or datetime.now(timezone.utc).date()
+    line = (f"Next {side}: when SMA{fast} closes {word} SMA{slow}, at whatever "
+            f"the price is then.")
+    picks = [p for p in nt.get("path", [])
+             if p["days"] in REPORT_PATH_DAYS and p["avg_needed"] is not None]
+    if picks:
+        parts = [f"by {_day_month(today + timedelta(days=p['days']))} "
+                 f"averaging {word} ${p['avg_needed']:,.0f} ({p['vs_now_pct']:+.1f}%)"
+                 for p in picks]
+        line += " ETH gets there " + ", or ".join(parts) + "."
+    flat = nt.get("days_if_flat")
+    line += (f" Flat at today's price: in {flat} days." if flat
+             else " Flat at today's price, it never does.")
     return line
 
 
@@ -202,8 +233,7 @@ def run_tick():
             nt = next_trade(closes, fast, slow, price, bool(position),
                             enter_on_trend, heads_up_pct)
             if nt:
-                out["next_trade"] = {**nt, "trigger": round(nt["trigger"], 2),
-                                     "distance_pct": round(nt["distance_pct"], 2)}
+                out["next_trade"] = round_next_trade(nt)
         except Exception as e:
             nt = None
             out["next_trade_error"] = str(e)
@@ -220,7 +250,7 @@ def run_tick():
                   f"SMA{slow} {out['sma_slow']:,.2f} | {status} [{out['mode']}]")
         try:
             if nt:
-                report += "\n" + next_trade_line(nt)
+                report += "\n" + next_trade_line(nt, fast, slow)
                 headline = heads_up_text(nt)
                 if headline:
                     report = headline + "\n" + report

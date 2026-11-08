@@ -81,7 +81,7 @@ Two independent entry points share one strategy core:
   `state_store.py`, not the JSON file.
 
 A third, **`api/status.py`**, is read-only: `GET /api/status` for the
-dashboard (price, SMAs, next-trade trigger, open/flat, history). Because the
+dashboard (price, SMAs, next-trade trigger and average-needed path, open/flat, history). Because the
 project deploys with the Python framework preset, the pyproject entrypoint
 `api.tick:handler` may receive every path, so `tick.handler.do_GET` dispatches
 exactly `/api/status` to `status.status_response()` before the `CRON_SECRET`

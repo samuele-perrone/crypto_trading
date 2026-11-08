@@ -20,7 +20,7 @@ ENTER_ON_TREND, LIVE, VALIDATE, HEADS_UP_PCT) with the same defaults.
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -117,9 +117,15 @@ def build_status(client, load_position_fn, cfg, now=None):
     if holding is not None:
         nt = next_trade(closes, fast, slow, price, holding,
                         cfg["enter_on_trend"], cfg["heads_up_pct"])
-    out["next_trade"] = (None if nt is None else
-                         {**nt, "trigger": round(nt["trigger"], 2),
-                          "distance_pct": round(nt["distance_pct"], 2)})
+    if nt is not None:
+        r = lambda v: None if v is None else round(v, 2)  # noqa: E731
+        nt = {**nt, "trigger": r(nt["trigger"]), "distance_pct": r(nt["distance_pct"])}
+        # The date each horizon's cross would be acted on: the tick after the
+        # Nth close from here, i.e. the last closed candle's day + N + 1.
+        last_day = datetime.fromtimestamp(times[-1], timezone.utc).date()
+        nt["path"] = [{**p, "by": (last_day + timedelta(days=p["days"] + 1)).isoformat()}
+                      for p in nt["path"]]
+    out["next_trade"] = nt
 
     # Daily history for the chart, with the SMA values the rules used each day.
     start = max(slow, len(closes) - HISTORY_DAYS)
