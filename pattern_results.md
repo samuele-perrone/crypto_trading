@@ -1,26 +1,26 @@
-# Pattern backtest (2026-11-08T22:31Z)
+# Pattern backtest (2026-11-08T22:41Z)
 <!-- AAVE: Coinbase, 18951 hours from 2024-09-09, 22s -->
 <!-- FET: Coinbase, 18950 hours from 2024-09-09, 23s -->
 <!-- DOGE: Coinbase, 18951 hours from 2024-09-09, 23s -->
-<!-- SHIB: Coinbase, 18951 hours from 2024-09-09, 22s -->
-<!-- TRX: Binance dump, 18939 hours from 2024-09-09, 15s -->
-<!-- SPX: KuCoin, 16907 hours from 2024-12-04, 45s -->
-<!-- TRUMP: KuCoin, 15823 hours from 2025-01-18, 37s -->
-<!-- ETH: Coinbase, 18951 hours from 2024-09-09, 24s -->
+<!-- SHIB: Coinbase, 18951 hours from 2024-09-09, 24s -->
+<!-- TRX: Binance dump, 18939 hours from 2024-09-09, 17s -->
+<!-- SPX: KuCoin, 16907 hours from 2024-12-04, 50s -->
+<!-- TRUMP: KuCoin, 15823 hours from 2025-01-18, 42s -->
+<!-- ETH: Coinbase, 18951 hours from 2024-09-09, 23s -->
 <!-- LINK: Coinbase, 18951 hours from 2024-09-09, 23s -->
 <!-- XRP: Coinbase, 18951 hours from 2024-09-09, 24s -->
 <!-- BCH: Coinbase, 18951 hours from 2024-09-09, 23s -->
-<!-- BTC: Coinbase, 18951 hours from 2024-09-09, 23s -->
+<!-- BTC: Coinbase, 18951 hours from 2024-09-09, 24s -->
 <!-- ALGO: Coinbase, 18950 hours from 2024-09-09, 22s -->
-<!-- XLM: Coinbase, 18951 hours from 2024-09-09, 24s -->
+<!-- XLM: Coinbase, 18951 hours from 2024-09-09, 22s -->
 <!-- AVAX: Coinbase, 18951 hours from 2024-09-09, 23s -->
-<!-- LTC: Coinbase, 18951 hours from 2024-09-09, 23s -->
+<!-- LTC: Coinbase, 18951 hours from 2024-09-09, 22s -->
 <!-- DOT: Coinbase, 18951 hours from 2024-09-09, 23s -->
-<!-- UNI: Coinbase, 18951 hours from 2024-09-09, 23s -->
+<!-- UNI: Coinbase, 18951 hours from 2024-09-09, 24s -->
 <!-- POL: Coinbase, 18950 hours from 2024-09-09, 23s -->
-<!-- SOL: Coinbase, 18951 hours from 2024-09-09, 24s -->
-<!-- ADA: Coinbase, 18951 hours from 2024-09-09, 23s -->
-<!-- SUI: Coinbase, 18951 hours from 2024-09-09, 24s -->
+<!-- SOL: Coinbase, 18951 hours from 2024-09-09, 22s -->
+<!-- ADA: Coinbase, 18951 hours from 2024-09-09, 22s -->
+<!-- SUI: Coinbase, 18951 hours from 2024-09-09, 23s -->
 
 Window 2024-11-09 -> 2026-11-08 (730 days), 22 of 22 coins. Fee 0.40%/side (Kraken Pro maker, entry tier, since July 2026) unless stated; the bot paid 0.25% in 2025. Coins listed late start 60 days after their first candle.
 
