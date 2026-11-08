@@ -1,4 +1,4 @@
-# Day-trading backtest (2026-11-08T21:06Z)
+# Day-trading backtest (2026-11-08T21:15Z)
 
 Window 2024-11-08 -> 2026-11-07 (730 days). Day trade: buy 08:00 UTC, sell at the first +X% or at 20:00 UTC. Fee 0.26%/side, full balance compounded. 'No fees' shows the rule's edge before costs.
 
