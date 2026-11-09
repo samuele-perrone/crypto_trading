@@ -545,6 +545,25 @@ The same logic argues against a tight stop-loss — the worst trade was only
 
 ## Ideas not pursued
 
+- **Tuning the SMA or Supertrend settings (2026-11-09).** `param_backtest.py`
+  (results in `param_results.md`, `param-backtest` workflow): 61 SMA pairs
+  (fast 5–50 × slow 20–200) and 49 Supertrend settings (period 5–50 ×
+  multiplier 1.5–5), daily, 0.80% taker, test window 2019-01-01 → 2026-11-08.
+  Walk-forward: every 1 January pick the best setting on the previous 2 years
+  (or all history) and trade the next year with it. ETH: hindsight-best SMA
+  10/40 +4,294%, but walk-forward SMA +250% / +233%, against the fixed
+  deployed 20/30's +1,550% (ranked 9 of 61; buy-and-hold +1,397%). Supertrend
+  walk-forward +1,324% / +1,304% vs fixed 10/3 +1,432%. BTC: walk-forward SMA
+  +92% (2-year) but +1,696% (all history, which settled on 5/100 from 2022 and
+  happened to keep working), vs fixed 20/30 +295%; Supertrend +272% / +504% vs
+  fixed 10/3 +465%; buy-and-hold +1,823% beat all but 3 of 110 settings. Six
+  of the eight walk-forward runs did worse than or about the same as leaving
+  the setting fixed. The "best" setting changed almost every year (ETH, 2-year
+  lookback: 5/30, 40/75, 10/20, 15/40, 20/30, 25/30, 50/60, 50/60) and the
+  grid has no smooth high ground — SMA 10/40 +4,294% sits next to 10/30
+  +1,227% and 15/40 +1,208% — so a tuned optimum is mostly fitted noise.
+  SMA 20/30 stays.
+
 - **Switching the deployed rule to Supertrend 10/3 (2026-11-09).** The
   22-coin run picked it as the best of 23 rules, so it was tested on the years
   it was not picked on: `long_backtest.py` (results in `long_results.md`, run

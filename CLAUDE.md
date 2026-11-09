@@ -41,8 +41,9 @@ dependencies.
 python3 -m unittest test_strategy
 python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
 # Everything (rules, state store, look-ahead + /api/status routing, day-trade
-# backtest, PHP-bot pattern backtest, long-history and take-profit backtests)
-python3 -m unittest test_strategy test_state_store test_status test_intraday test_pattern test_long test_takeprofit
+# backtest, PHP-bot pattern backtest, long-history, take-profit and
+# parameter walk-forward backtests)
+python3 -m unittest test_strategy test_state_store test_status test_intraday test_pattern test_long test_takeprofit test_param
 
 # Rehearse a full sell without waiting for the market (isolated Blob namespace)
 python3 rehearse_sell.py
@@ -66,6 +67,9 @@ python3 long_backtest.py --coins ETH
 # The deployed rule with and without a take-profit, same history
 # (network: GitHub Actions via the takeprofit-backtest branch)
 python3 takeprofit_backtest.py --coins ETH
+# Would tuned SMA/Supertrend settings have paid? Walk-forward over 110
+# settings (network: GitHub Actions via the param-backtest branch)
+python3 param_backtest.py --coins ETH
 
 # Run one production-shaped tick locally
 python3 -c "import sys; sys.path.insert(0,'api'); from tick import run_tick; print(run_tick())"
