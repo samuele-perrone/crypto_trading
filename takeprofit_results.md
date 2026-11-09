@@ -1,7 +1,7 @@
-# Take-profit backtest (2026-11-09T07:49Z)
+# Take-profit backtest (2026-11-09T07:54Z)
 SMA 20/30 daily with ENTER_ON_TREND, as deployed. Fee 0.80%/side (taker); a resting take-profit exits at half that (maker). Split at 2024-11-09 as in long_results.md.
 
-<!-- ETH: 91642 hours from 2016-05-18, 110s -->
+<!-- ETH: 91642 hours from 2016-05-18, 70s -->
 ## ETH: 2016-07-17 -> 2026-11-09 (10.3 years), 0.80%/side
 
 | Rule | Total | CAGR | Max drawdown | Trades/yr | Win rate | Avg win / avg loss | Before 2024-11-09 | After | Years beating no take-profit |
@@ -43,7 +43,7 @@ SMA 20/30 daily with ENTER_ON_TREND, as deployed. Fee 0.80%/side (taker); a rest
 | +10% at the tick, then wait for a fresh cross | +300.9% | +178.4% | +128.7% | +30.2% |
 | Buy and hold | +17772.2% | +17679.4% | +17629.5% | +17487.4% |
 
-<!-- BTC: 99051 hours from 2015-07-20, 123s -->
+<!-- BTC: 99051 hours from 2015-07-20, 78s -->
 ## BTC: 2015-09-19 -> 2026-11-09 (11.1 years), 0.80%/side
 
 | Rule | Total | CAGR | Max drawdown | Trades/yr | Win rate | Avg win / avg loss | Before 2024-11-09 | After | Years beating no take-profit |
