@@ -1,7 +1,7 @@
-# Parameter walk-forward backtest (2026-11-09T08:07Z)
+# Parameter walk-forward backtest (2026-11-09T08:11Z)
 Daily candles, 0.80%/side. Walk-forward re-picks the best setting every 1 January using only data before it.
 
-<!-- ETH: 91643 hours from 2016-05-18, 100s -->
+<!-- ETH: 91643 hours from 2016-05-18, 61s -->
 ## ETH: test window 2019-01-01 -> 2026-11-08 (7.9 years), 0.80%/side
 
 | Strategy | Total | CAGR | Max drawdown | Buys/yr |
@@ -59,7 +59,7 @@ All 49 Supertrend settings over the test window: median +987.2%, worst -39.3%, b
 | 30 | +109.5% | +26.9% | +378.3% | +1147.2% | +1004.2% | +834.1% | +1638.0% |
 | 50 | +3.3% | -39.3% | +476.8% | +976.0% | +1934.1% | +1633.6% | +1491.5% |
 
-<!-- BTC: 99052 hours from 2015-07-20, 115s -->
+<!-- BTC: 99052 hours from 2015-07-20, 69s -->
 ## BTC: test window 2019-01-01 -> 2026-11-08 (7.9 years), 0.80%/side
 
 | Strategy | Total | CAGR | Max drawdown | Buys/yr |
