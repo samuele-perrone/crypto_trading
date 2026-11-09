@@ -409,8 +409,11 @@ def supertrend_up(candles, period=10, mult=3.0):
 class Rule:
     """A rule bound to one coin's candles. `trail`/`target` are fractions
     checked inside every hour while holding. A forming rule also implements
-    decide_forming(last_closed, part, holding)."""
+    decide_forming(last_closed, part, holding). A resting `target` is a limit
+    order on the book, so its exit pays `target_fee_ratio` x the fee (the maker
+    fee is half the taker fee at Kraken's entry tier)."""
     forming = False
+    target_fee_ratio = 1.0
 
     def __init__(self, label, candles, trail=None, target=None):
         self.label, self.candles, self.trail, self.target = label, candles, trail, target
@@ -589,10 +592,10 @@ def simulate(hourly, period, rule, fee, start, end, marks=(), slip=0.0):
         nonlocal cash, coins, highest, entry
         coins, cash, highest, entry = cash * (1 - fee) / price, 0.0, price, price
 
-    def sell(price):
+    def sell(price, f=fee):
         nonlocal cash, coins, highest, entry
-        cash = coins * price * (1 - fee)
-        trades.append((price / entry) * (1 - fee) ** 2 - 1)
+        cash = coins * price * (1 - f)
+        trades.append((price / entry) * (1 - fee) * (1 - f) - 1)
         coins, highest, entry = 0.0, None, None
 
     last_close = None
@@ -623,7 +626,7 @@ def simulate(hourly, period, rule, fee, start, end, marks=(), slip=0.0):
                 if l <= stop:
                     sell(o if o <= stop else stop * (1 - slip))
             if coins > 0 and rule.target and h >= entry * (1 + rule.target):
-                sell(max(o, entry * (1 + rule.target)))
+                sell(max(o, entry * (1 + rule.target)), fee * rule.target_fee_ratio)
             if coins > 0:
                 highest = max(highest, h)
         # 3. the deployed bot's check at this hour's close, on the forming candle

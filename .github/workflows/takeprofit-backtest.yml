@@ -1,0 +1,35 @@
+name: takeprofit-backtest
+# Runs takeprofit_backtest.py (the deployed SMA 20/30 with and without a
+# take-profit, ETH since 2016, BTC since 2015) on GitHub's runner - cloud
+# sessions cannot reach Coinbase - and commits takeprofit_results.md here.
+on:
+  push:
+    branches: [takeprofit-backtest]
+    paths-ignore: [takeprofit_results.md]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install requests
+      - name: Tests
+        run: python3 -m unittest test_takeprofit test_long test_pattern
+      - name: Take-profit backtest
+        run: |
+          {
+            echo "# Take-profit backtest ($(date -u +%Y-%m-%dT%H:%MZ))"
+            python3 takeprofit_backtest.py
+          } > takeprofit_results.md 2>&1 || true
+          cat takeprofit_results.md
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add takeprofit_results.md
+          git commit -m "Take-profit backtest results" && git push || true
