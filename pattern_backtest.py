@@ -580,6 +580,7 @@ def simulate(hourly, period, rule, fee, start, end, marks=(), slip=0.0):
     idx_of = {c[0]: i for i, c in enumerate(candles)}
     cash, coins, highest, entry = 1.0, 0.0, None, None
     trades, hours_in, hours, peak, max_dd = [], 0, 0, 1.0, 0.0
+    peak_t = dd_from = dd_to = start
     mark_vals, mi = [], 0
     k = 0                                   # next candle whose close we have not passed
     part = None                             # forming candle of the current bucket
@@ -642,8 +643,10 @@ def simulate(hourly, period, rule, fee, start, end, marks=(), slip=0.0):
         if coins > 0:
             hours_in += 1
         value = cash + coins * c * (1 - fee)
-        peak = max(peak, value)
-        max_dd = min(max_dd, value / peak - 1)
+        if value > peak:
+            peak, peak_t = value, t
+        if value / peak - 1 < max_dd:
+            max_dd, dd_from, dd_to = value / peak - 1, peak_t, t
         while mi < len(marks) and t + HOUR >= marks[mi]:
             mark_vals.append(value)
             mi += 1
@@ -653,7 +656,7 @@ def simulate(hourly, period, rule, fee, start, end, marks=(), slip=0.0):
         mark_vals.append(cash)
         mi += 1
     return {"ret": cash - 1, "trades": trades, "hours_in": hours_in, "hours": hours,
-            "max_dd": max_dd, "marks": mark_vals}
+            "max_dd": max_dd, "dd_from": dd_from, "dd_to": dd_to, "marks": mark_vals}
 
 
 def buy_and_hold(hourly, fee, start, end, marks=()):
@@ -661,10 +664,13 @@ def buy_and_hold(hourly, fee, start, end, marks=()):
     entry = path[0][4]
     vals, mi = [], 0
     peak, max_dd = 1.0, 0.0
+    peak_t = dd_from = dd_to = path[0][0]
     for t, *_rest in path:
         value = (1 - fee) ** 2 * _rest[3] / entry
-        peak = max(peak, value)
-        max_dd = min(max_dd, value / peak - 1)
+        if value > peak:
+            peak, peak_t = value, t
+        if value / peak - 1 < max_dd:
+            max_dd, dd_from, dd_to = value / peak - 1, peak_t, t
         while mi < len(marks) and t + HOUR >= marks[mi]:
             vals.append(value)
             mi += 1
@@ -673,7 +679,7 @@ def buy_and_hold(hourly, fee, start, end, marks=()):
         mi += 1
     ret = (1 - fee) ** 2 * path[-1][4] / entry - 1
     return {"ret": ret, "trades": [ret], "hours_in": len(path), "hours": len(path),
-            "max_dd": max_dd, "marks": vals}
+            "max_dd": max_dd, "dd_from": dd_from, "dd_to": dd_to, "marks": vals}
 
 
 # Rows of the report: (key, label, period, factory(candles) -> Rule)

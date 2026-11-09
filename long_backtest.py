@@ -125,6 +125,7 @@ def summary(r, key, fee):
     ys = yearly(res, r)
     bh = dict(yearly(r["bh"][fee], r))
     return {"total": total, "cagr": cagr, "max_dd": res["max_dd"],
+            "dd_when": f"{utc(res['dd_from'], '%b %Y')} -> {utc(res['dd_to'], '%b %Y')}",
             "trades_per_year": len(res["trades"]) / yrs, "before": before, "after": after,
             "beat_bh": sum(1 for y, v in ys if v > bh[y]), "years": len(ys),
             "worst": min(v for _, v in ys), "by_year": ys}
@@ -140,12 +141,13 @@ def report_coin(coin, r):
     w(f"## {coin}: {utc(r['_start'])} -> {utc(r['_end'])} "
       f"({(r['_end'] - r['_start']) / (365.25 * DAY):.1f} years), {MAIN_FEE * 100:.2f}%/side")
     w("")
-    w(f"| Rule | Total | CAGR | Max drawdown | Trades/yr | Before {utc(split)} | "
+    w(f"| Rule | Total | CAGR | Max drawdown | Peak -> trough | Trades/yr | Before {utc(split)} | "
       f"{utc(split)} on | Years beating buy & hold | Worst year |")
-    w("|" + "---|" * 9)
+    w("|" + "---|" * 10)
     for k in keys:
         s = summary(r, k, MAIN_FEE)
         w(f"| {labels[k]} | {pct(s['total'])} | {pct(s['cagr'])} | {pct(s['max_dd'])} | "
+          f"{s['dd_when']} | "
           f"{s['trades_per_year']:.1f} | {pct(s['before'])} | {pct(s['after'])} | "
           f"{s['beat_bh']}/{s['years']} | {pct(s['worst'])} |")
     w("")
@@ -162,13 +164,14 @@ def report_coin(coin, r):
     wins = sum(1 for y in years if a[y] > b[y])
     w(f"Supertrend 10/3 beat SMA 20/30 in {wins} of {len(years)} calendar years.")
     w("")
-    w(f"### {coin} total return by fee")
+    w(f"### {coin} total return (max drawdown) by fee")
     w("")
     fees = sorted(r["bh"])
     w("| Rule | " + " | ".join(f"{f * 100:.2f}%" for f in fees) + " |")
     w("|" + "---|" * (len(fees) + 1))
     for k in keys:
-        w(f"| {labels[k]} | " + " | ".join(pct(r[k][f]["ret"]) for f in fees) + " |")
+        w(f"| {labels[k]} | " + " | ".join(
+            f"{pct(r[k][f]['ret'])} ({pct(r[k][f]['max_dd'])})" for f in fees) + " |")
     w("")
     return "\n".join(L)
 

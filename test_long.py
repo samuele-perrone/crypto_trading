@@ -44,6 +44,13 @@ class TestBookkeeping(unittest.TestCase):
     def test_trading_starts_after_the_warmup(self):
         self.assertGreaterEqual(self.r["_start"], self.hourly[0][0] + 60 * lb.DAY)
 
+    def test_drawdown_window_is_ordered_and_inside_the_run(self):
+        for key in ("sma_20_30", "bh"):
+            res = self.r[key][0.008]
+            self.assertLessEqual(self.r["_start"], res["dd_from"])
+            self.assertLessEqual(res["dd_from"], res["dd_to"])
+            self.assertLessEqual(res["dd_to"], self.r["_end"])
+
     def test_report_renders(self):
         text = lb.report_coin("ETH", self.r)
         self.assertIn("SMA 20/30 (deployed)", text)
