@@ -5,7 +5,7 @@ Working notes for running this bot and picking the work back up later.
 deployed, how it behaves in production, why things are the way they are, and
 the traps that already cost time once.
 
-Last updated: 2026-11-08.
+Last updated: 2026-11-09.
 
 ## Current status
 
@@ -81,8 +81,14 @@ intended to be the last sizing change — the stake tracks the balance by
 itself.
 
 It also means the entire account rides on every trade, with no reserve. That
-is defensible for this strategy (worst historical trade −5.0%, max drawdown
-−4.7%) but it is a real choice, not a default. To dial back, set `TRADE_PCT`
+was judged defensible on the 2024–2026 backtest (worst trade −5.0%, max
+drawdown −4.7%), but that window understates the risk. **Over ETH's full
+history (2016-07 → 2026-11, `long_results.md`, 0.80% fee) the same rule lost
+84% peak to trough (Jan 2018 → Nov 2019; −80% even before fees), with −40% and
+−47% calendar years back to back.** It still compounded at 81%/yr over the
+decade, so the strategy is not broken, but a full-balance stake means the
+account can fall by four-fifths and stay down for years. It is a real choice,
+not a default. To dial back, set `TRADE_PCT`
 to a smaller percentage; to pin a fixed amount, set `TRADE_PCT=0` and use
 `USD_PER_TRADE`.
 
@@ -519,6 +525,22 @@ The same logic argues against a tight stop-loss — the worst trade was only
   figure as indicative, not exact.
 
 ## Ideas not pursued
+
+- **Switching the deployed rule to Supertrend 10/3 (2026-11-09).** The
+  22-coin run picked it as the best of 23 rules, so it was tested on the years
+  it was not picked on: `long_backtest.py` (results in `long_results.md`, run
+  by the `long-backtest` workflow on its own branch), daily candles, 0.80%
+  taker. ETH 2016-07 → 2026-11: Supertrend 10/3 +79,214% (91%/yr, max DD −59%)
+  vs SMA 20/30 +45,157% (81%/yr, −84%), but almost all of the gap is
+  2017–2019; it beat SMA 20/30 in only 6 of 11 calendar years, lost to it from
+  2024-11-09 on (+47.5% vs +103.6%), and SMA 10/30 did as well as it on ETH
+  (+75,833%, 90%/yr, −60%). Neighbouring parameters moved results more than
+  the choice of rule did (Supertrend 10/4 +29,770%, 10/2 +34,523%). On BTC
+  2015-09 → 2026-11 Supertrend 10/3 did worse than SMA 20/30 (39%/yr vs 43%/yr)
+  and buy-and-hold beat every rule (67%/yr, +31,088%); on ETH every SMA and
+  Supertrend rule beat buy-and-hold (65%/yr), mostly by sidestepping 2018 and
+  2022. No consistent winner, so SMA 20/30 stays. The useful finding was the
+  rule's real drawdown — see "Scaling the trade size".
 
 - **The old PHP bot's MACD/EMA rule and the other patterns in its repo
   (2026-11-08).** `samuele-perrone/crypto-signals` ran 22 coins at $60 a

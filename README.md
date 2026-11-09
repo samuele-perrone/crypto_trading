@@ -85,6 +85,11 @@ these returns are overstated by about 1.1 points per round trip). Period: 2024-0
 | Buy & hold ETH same period | −28.8% |
 | Positive months | 58% (avg +9.6%/mo, worst −5.0%) |
 
+Two years flatter the rule. Over ETH's full Coinbase history (2016-07 →
+2026-11, 0.80% fee, `long_backtest.py` / `long_results.md`) the same rule
+compounded at 81%/yr against buy-and-hold's 65%, but its max drawdown was
+**−84%** (Jan 2018 → Nov 2019) and its worst calendar year −46.8%.
+
 Compared against alternatives on the same data (EMA cross, MACD, Donchian
 breakout, 30/60-day momentum): only 30-day momentum was competitive
 (+45%/yr on ETH); MACD and Donchian lost money. Every strategy profited on

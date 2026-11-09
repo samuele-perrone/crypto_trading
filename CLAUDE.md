@@ -41,8 +41,8 @@ dependencies.
 python3 -m unittest test_strategy
 python3 -m unittest test_strategy.TestSellReason.test_stop_loss_beats_take_profit
 # Everything (rules, state store, look-ahead + /api/status routing, day-trade
-# backtest, PHP-bot pattern backtest)
-python3 -m unittest test_strategy test_state_store test_status test_intraday test_pattern
+# backtest, PHP-bot pattern backtest, long-history backtest)
+python3 -m unittest test_strategy test_state_store test_status test_intraday test_pattern test_long
 
 # Rehearse a full sell without waiting for the market (isolated Blob namespace)
 python3 rehearse_sell.py
@@ -60,6 +60,9 @@ python3 intraday_backtest.py --coins BTC ETH SOL
 # other patterns, 22 coins, 2 years (network: GitHub Actions via the
 # pattern-backtest branch, results in pattern_results.md)
 python3 pattern_backtest.py --coins BTC ETH --days 365
+# Supertrend vs the deployed SMA 20/30 on ETH since 2016 / BTC since 2015
+# (network: GitHub Actions via the long-backtest branch, long_results.md)
+python3 long_backtest.py --coins ETH
 
 # Run one production-shaped tick locally
 python3 -c "import sys; sys.path.insert(0,'api'); from tick import run_tick; print(run_tick())"
