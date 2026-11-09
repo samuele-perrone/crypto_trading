@@ -461,6 +461,25 @@ that pay for all the small losses, while leaving every loser intact. Capping at
 Note the trap: a 5% take-profit *raises* the win rate from 62% to 79% while
 cutting returns by two-thirds. Judge changes on total return, not win rate.
 
+**Re-tested 2026-11-09 on ten years and with re-entry — still rejected.**
+Since `ENTER_ON_TREND`, a take-profit sale is followed by a re-buy at the next
+tick while SMA20 is above SMA30, so it no longer ends the trade for the rest
+of the trend; the August test predates that. `takeprofit_backtest.py`
+(results in `takeprofit_results.md`, `takeprofit-backtest` workflow), daily,
+0.80% taker. ETH 2016-07 → 2026-11, no take-profit +45,157% (81%/yr):
+`TAKE_PROFIT_PCT=5` +809% (24%/yr), 3% +559%, 10% +4,884%, 20% +6,555%; a
++5% limit order resting on the book (maker fee on the exit) +83%; +5% then
+wait for a fresh cross −4.6%. BTC 2015-09 → 2026-11: none +5,174%, 5% at the
+tick +107%, resting +6%. Every variant lost on both coins, before and after
+2024-11-09, at every fee including zero (ETH, 0%: +33,634% vs +139,232%), and
+beat no take-profit in at most 4 of 11–12 calendar years. Re-buying does not
+rescue it: each sale sits out the next day of a strong move and re-enters
+higher, so one big winner becomes several +5–7% wins and a final loss from a
+late entry (ETH average loss −12.7% vs −8.6%). It does not cut risk either:
+max drawdown stays −79% to −86% with re-entry; the wait-for-a-cross variant
+cuts it to −60% only by giving up almost all the return. Win rate rose to
+73–82% throughout. `TAKE_PROFIT_PCT` stays 0.
+
 The same logic argues against a tight stop-loss — the worst trade was only
 −5.0%. `STOP_LOSS_PCT` is 0 and untested as of this date.
 
