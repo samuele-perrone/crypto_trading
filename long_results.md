@@ -1,7 +1,7 @@
-# Long-history backtest (2026-11-09T07:25Z)
+# Long-history backtest (2026-11-09T07:30Z)
 Fees per side: 0.80% headline (Kraken Pro entry-tier taker since July 2026; the deployed bot uses market orders). Split at 2024-11-09, the start of the 22-coin window where Supertrend 10/3 looked best. Each coin trades from 60 days after its first Coinbase candle.
 
-<!-- ETH: 91642 hours from 2016-05-18, 98s -->
+<!-- ETH: 91642 hours from 2016-05-18, 81s -->
 ## ETH: 2016-07-17 -> 2026-11-09 (10.3 years), 0.80%/side
 
 | Rule | Total | CAGR | Max drawdown | Peak -> trough | Trades/yr | Before 2024-11-09 | 2024-11-09 on | Years beating buy & hold | Worst year |
@@ -49,7 +49,7 @@ Supertrend 10/3 beat SMA 20/30 in 6 of 11 calendar years.
 | Price above EMA50 | +72558.0% (-60.8%) | +37996.6% (-64.8%) | +26790.5% (-67.0%) | +9812.4% (-78.7%) |
 | Buy and hold | +17772.2% (-94.3%) | +17679.4% (-94.3%) | +17629.5% (-94.3%) | +17487.4% (-94.3%) |
 
-<!-- BTC: 99051 hours from 2015-07-20, 112s -->
+<!-- BTC: 99051 hours from 2015-07-20, 90s -->
 ## BTC: 2015-09-19 -> 2026-11-09 (11.1 years), 0.80%/side
 
 | Rule | Total | CAGR | Max drawdown | Peak -> trough | Trades/yr | Before 2024-11-09 | 2024-11-09 on | Years beating buy & hold | Worst year |
